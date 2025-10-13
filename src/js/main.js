@@ -1,5 +1,6 @@
 import { ACESFilmicToneMapping } from "three"
 import { HDRLoader, OrbitControls } from "three/examples/jsm/Addons.js"
+import { backgroundBlurriness } from "three/tsl"
 import * as THREE from "three/webgpu"
 import { Pane } from "tweakpane"
 
@@ -24,7 +25,8 @@ let tweaks = {
         "Filmic": THREE.ACESFilmicToneMapping,
         "Reinhard": THREE.ReinhardToneMapping,
     },
-    toneMapping: THREE.ACESFilmicToneMapping
+    toneMapping: THREE.ACESFilmicToneMapping,
+    backgroundBlurriness: 0.75,
 }
 let textureLoader = null
 let hdrLoader = null
@@ -51,7 +53,7 @@ window.onload = async () => {
     await renderer.init()
 
     const aspect = sizes.width / sizes.height
-    camera = new THREE.PerspectiveCamera(75, aspect, 0.1, 1000)
+    camera = new THREE.PerspectiveCamera(75, aspect, 0.01, 1000)
     camera.position.set(0, 1, 1)
 
     controls = new OrbitControls(camera, renderer.domElement)
@@ -61,7 +63,7 @@ window.onload = async () => {
 
 
     textureLoader = new THREE.TextureLoader()
-    const texture = await textureLoader.loadAsync("/static/maps/texture.png")
+    const texture = await textureLoader.loadAsync("/static/maps/texture.jpg")
     texture.colorSpace = THREE.SRGBColorSpace
 
     const heightMap = await textureLoader.loadAsync("/static/maps/height.png")
@@ -85,6 +87,8 @@ window.onload = async () => {
     const envMap = await hdrLoader.loadAsync("/static/maps/envmap-1k.hdr")
     envMap.mapping = THREE.EquirectangularReflectionMapping
     scene.environment = envMap
+    scene.background = envMap
+    scene.backgroundBlurriness = tweaks.backgroundBlurriness
 
     clock = new THREE.Clock()
 
@@ -98,6 +102,15 @@ window.onload = async () => {
         color: { type: "float" }
     }).on("change", e => {
         renderer.setClearColor(e.value)
+    })
+
+    tweaksFolder.addBinding(tweaks, "backgroundBlurriness", {
+        label: "Background Blur",
+        min: 0,
+        max: 1.0,
+        step: 0.01
+    }).on("change", e => {
+        scene.backgroundBlurriness = e.value
     })
 
     tweaksFolder.addBinding(tweaks, "toneMapping", {
