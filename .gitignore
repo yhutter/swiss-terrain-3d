@@ -1,3 +1,6 @@
+# Generated data output from preprocessing
+preprocess/data/
+
 # Logs
 logs
 *.log
