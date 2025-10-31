@@ -1,6 +1,7 @@
 import os
 import math
 import shutil
+import json
 from pathlib import Path
 from osgeo import gdal
 
@@ -163,6 +164,61 @@ def tile_vrt_lod(level_vrt: str, out_dir: str, chunk_px: int):
     ds = None
 
 
+def get_tile_metadata(tile_path: Path):
+    ds = gdal.Open(str(tile_path))
+    if ds is None:
+        return None
+
+    band = ds.GetRasterBand(1)
+    stats = band.GetStatistics(True, True)
+    if stats is None:
+        return None
+
+    gt = ds.GetGeoTransform()
+    width, height = ds.RasterXSize, ds.RasterYSize
+    minx, maxy = gt[0], gt[3]
+    maxx = minx + width * gt[1]
+    miny = maxy + height * gt[5]
+
+    return {
+        "path": str(tile_path),
+        "bbox": [minx, miny, maxx, maxy],
+        "size": [width, height],
+        "min": stats[0],
+        "max": stats[1],
+        "mean": stats[2],
+    }
+
+
+def collect_metadata(dem_root: Path, img_root: Path, levels: int):
+    metadata = []
+    for L in range(levels):
+        dem_tiles = list((dem_root / f"level_{L}" / "tiles").glob("*.tif"))
+        for dem_tile in dem_tiles:
+            info = get_tile_metadata(dem_tile)
+            if info is None:
+                continue
+
+            ty, tx = [int(x) for x in dem_tile.stem.split("_")[1:3]]
+            img_tile = img_root / f"level_{L}" / "tiles" / f"tile_{ty:03d}_{tx:03d}.tif"
+
+            entry = {
+                "id": f"L{L}_{ty:03d}_{tx:03d}",
+                "level": L,
+                "tile_x": tx,
+                "tile_y": ty,
+                "dem_path": str(dem_tile),
+                "img_path": str(img_tile) if img_tile.exists() else None,
+                "bbox": info["bbox"],
+                "size": info["size"],
+                "min_elev": info["min"],
+                "max_elev": info["max"],
+                "mean_elev": info["mean"],
+            }
+            metadata.append(entry)
+    return metadata
+
+
 def process_all(
     dem_input: str, img_input: str, out_dir: str, chunk_px: int, max_levels_cfg
 ):
@@ -218,7 +274,14 @@ def process_all(
         tiles_out = str(img_root / f"level_{L}" / "tiles")
         tile_vrt_lod(level_vrt, tiles_out, chunk_px)
 
-    print("\nDone — DEM and Image LOD pyramids built and tiled consistently!")
+    # Metadata
+    print("\nWrite tile metadata...")
+    metadata = collect_metadata(dem_root, img_root, levels)
+    meta_path = Path(out_dir) / "terrain_metadata.json"
+    with open(meta_path, "w") as f:
+        json.dump(metadata, f, indent=2)
+
+    print("\nDone")
 
 
 if __name__ == "__main__":
