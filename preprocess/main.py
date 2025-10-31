@@ -6,7 +6,7 @@ from pathlib import Path
 from osgeo import gdal
 
 DEM_INPUT_DIR = "./data/swiss-alti3d"
-IMG_INPUT_DIR = "./data/swiss-image"
+DOP_INPUT_DIR = "./data/swiss-image"
 OUTPUT_DIR = "./data/output_tiles"
 
 SRS = "EPSG:2056"  # Swiss coordinate system
@@ -15,9 +15,9 @@ MAX_LEVELS = None  # If set to None, the level will be determined automatically 
 RESAMPLING = "average"
 
 MOS_DEM_VRT = "mosaic_dem.vrt"
-MOS_IMG_VRT = "mosaic_img.vrt"
+MOS_DOP_VRT = "mosaic_dop.vrt"
 MOS_DEM_CROP = "mosaic_dem_cropped.vrt"
-MOS_IMG_CROP = "mosaic_img_cropped.vrt"
+MOS_DOP_CROP = "mosaic_dop_cropped.vrt"
 
 
 def ensure_clean_dir(path: str):
@@ -164,6 +164,45 @@ def tile_vrt_lod(level_vrt: str, out_dir: str, chunk_px: int):
     ds = None
 
 
+def generate_height_map_from_tif(input_file, output_file, scale):
+    """
+    Generates a height map from the input GeoTIFF file, scaling elevation values to the specified range.
+    """
+    ds = gdal.Open(input_file)
+    band = ds.GetRasterBand(1)
+    min_val, max_val, mean_val, _ = band.GetStatistics(True, True)
+
+    translate_options = gdal.TranslateOptions(
+        format="PNG",
+        outputType=gdal.GDT_UInt16,
+        scaleParams=[[min_val, max_val, scale[0], scale[1]]],
+    )
+
+    gdal.Translate(destName=output_file, srcDS=input_file, options=translate_options)
+
+
+def generate_image_from_tif(input_file, output_file):
+    """
+    Generates an RGB PNG image from a GeoTIFF (e.g., from SwissIMAGE tiles).
+    Only the first three bands are used for RGB.
+    """
+    ds = gdal.Open(input_file)
+    if ds is None:
+        print(f"Could not open {input_file}")
+        return
+
+    # Most SwissIMAGE files have at least 3 bands (RGB), sometimes 4 (RGB+NIR)
+    num_bands = min(ds.RasterCount, 3)
+    translate_options = gdal.TranslateOptions(
+        format="PNG",
+        outputType=gdal.GDT_Byte,
+        bandList=list(range(1, num_bands + 1)),  # Bands 1–3
+    )
+
+    gdal.Translate(destName=output_file, srcDS=ds, options=translate_options)
+    ds = None
+
+
 def get_tile_metadata(tile_path: Path):
     ds = gdal.Open(str(tile_path))
     if ds is None:
@@ -190,7 +229,7 @@ def get_tile_metadata(tile_path: Path):
     }
 
 
-def collect_metadata(dem_root: Path, img_root: Path, levels: int):
+def collect_metadata(dem_root: Path, dop_root: Path, levels: int):
     metadata = []
     for L in range(levels):
         dem_tiles = list((dem_root / f"level_{L}" / "tiles").glob("*.tif"))
@@ -200,15 +239,23 @@ def collect_metadata(dem_root: Path, img_root: Path, levels: int):
                 continue
 
             ty, tx = [int(x) for x in dem_tile.stem.split("_")[1:3]]
-            img_tile = img_root / f"level_{L}" / "tiles" / f"tile_{ty:03d}_{tx:03d}.tif"
+            dem_image_path = Path(f"{dem_tile}.png")
+            dop_tile = dop_root / f"level_{L}" / "tiles" / f"tile_{ty:03d}_{tx:03d}.tif"
+            dop_image_path = Path(f"{dop_tile}.png")
 
             entry = {
                 "id": f"L{L}_{ty:03d}_{tx:03d}",
                 "level": L,
                 "tile_x": tx,
                 "tile_y": ty,
-                "dem_path": str(dem_tile),
-                "img_path": str(img_tile) if img_tile.exists() else None,
+                "dem_tif_path": str(dem_tile),
+                "dem_image_path": str(dem_image_path)
+                if dem_image_path.exists()
+                else None,
+                "dop_tif_path": str(dop_tile),
+                "dop_image_path": str(dop_image_path)
+                if dop_image_path.exists()
+                else None,
                 "bbox": info["bbox"],
                 "size": info["size"],
                 "min_elev": info["min"],
@@ -220,7 +267,7 @@ def collect_metadata(dem_root: Path, img_root: Path, levels: int):
 
 
 def process_all(
-    dem_input: str, img_input: str, out_dir: str, chunk_px: int, max_levels_cfg
+    dem_input: str, dop_input: str, out_dir: str, chunk_px: int, max_levels_cfg
 ):
     """
     Main processing function to build and tile DEM and Image LOD pyramids.
@@ -229,9 +276,9 @@ def process_all(
 
     # DEM and Image mosaics
     dem_vrt = str(Path(out_dir) / MOS_DEM_VRT)
-    img_vrt = str(Path(out_dir) / MOS_IMG_VRT)
+    dop_vrt = str(Path(out_dir) / MOS_DOP_VRT)
     build_vrt(dem_input, dem_vrt)
-    build_vrt(img_input, img_vrt)
+    build_vrt(dop_input, dop_vrt)
 
     # Inspect mosaic dimensions
     ds_dem = gdal.Open(dem_vrt)
@@ -247,8 +294,8 @@ def process_all(
     dem_crop, extent = crop_to_divisible_grid(
         dem_vrt, str(Path(out_dir) / MOS_DEM_CROP), chunk_px, levels
     )
-    img_crop, _ = crop_to_divisible_grid(
-        img_vrt, str(Path(out_dir) / MOS_IMG_CROP), chunk_px, levels
+    dop_crop, _ = crop_to_divisible_grid(
+        dop_vrt, str(Path(out_dir) / MOS_DOP_CROP), chunk_px, levels
     )
 
     # DEM LOD pyramid
@@ -256,10 +303,10 @@ def process_all(
     print("\nBuilding DEM LODs...")
     build_vrt_lods(dem_crop, str(dem_root), levels, extent)
 
-    # IMG LOD pyramid
-    img_root = Path(out_dir) / "img"
-    print("\nBuilding Image LODs...")
-    build_vrt_lods(img_crop, str(img_root), levels, extent)
+    # dop LOD pyramid
+    dop_root = Path(out_dir) / "dop"
+    print("\nBuilding DOP LODs...")
+    build_vrt_lods(dop_crop, str(dop_root), levels, extent)
 
     # Tiling process
     print("\nTiling DEM levels...")
@@ -268,15 +315,31 @@ def process_all(
         tiles_out = str(dem_root / f"level_{L}" / "tiles")
         tile_vrt_lod(level_vrt, tiles_out, chunk_px)
 
-    print("\nTiling Image levels...")
+    print("\nTiling DOP levels...")
     for L in range(levels):
-        level_vrt = str(img_root / f"level_{L}" / f"mosaic_L{L}.vrt")
-        tiles_out = str(img_root / f"level_{L}" / "tiles")
+        level_vrt = str(dop_root / f"level_{L}" / f"mosaic_L{L}.vrt")
+        tiles_out = str(dop_root / f"level_{L}" / "tiles")
         tile_vrt_lod(level_vrt, tiles_out, chunk_px)
+
+    print("\nGenerating DEM images...")
+    for L in range(levels):
+        dem_tiles = list((dem_root / f"level_{L}" / "tiles").glob("*.tif"))
+        for dem_tile in dem_tiles:
+            height_map_path = dem_tile.parent / f"{dem_tile.name}.png"
+            generate_height_map_from_tif(
+                str(dem_tile), str(height_map_path), scale=(0, 65535)
+            )
+
+    print("\nGenerating DOP images...")
+    for L in range(levels):
+        dop_tiles = list((dop_root / f"level_{L}" / "tiles").glob("*.tif"))
+        for dop_tile in dop_tiles:
+            png_path = dop_tile.parent / f"{dop_tile.name}.png"
+            generate_image_from_tif(str(dop_tile), str(png_path))
 
     # Metadata
     print("\nWrite tile metadata...")
-    metadata = collect_metadata(dem_root, img_root, levels)
+    metadata = collect_metadata(dem_root, dop_root, levels)
     meta_path = Path(out_dir) / "terrain_metadata.json"
     with open(meta_path, "w") as f:
         json.dump(metadata, f, indent=2)
@@ -285,4 +348,4 @@ def process_all(
 
 
 if __name__ == "__main__":
-    process_all(DEM_INPUT_DIR, IMG_INPUT_DIR, OUTPUT_DIR, CHUNK_PX, MAX_LEVELS)
+    process_all(DEM_INPUT_DIR, DOP_INPUT_DIR, OUTPUT_DIR, CHUNK_PX, MAX_LEVELS)
