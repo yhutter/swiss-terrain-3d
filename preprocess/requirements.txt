@@ -1,2 +1,8 @@
+certifi==2025.10.5
+charset-normalizer==3.4.4
 GDAL==3.11.4
+idna==3.11
 numpy==2.3.3
+requests==2.32.5
+tqdm==4.67.1
+urllib3==2.5.0

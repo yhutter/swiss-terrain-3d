@@ -4,13 +4,21 @@ import shutil
 import json
 from pathlib import Path
 from osgeo import gdal
+import csv
+import requests
+from tqdm import tqdm
 
-DEM_INPUT_DIR = "./data/swiss-alti3d"
-DOP_INPUT_DIR = "./data/swiss-image"
-OUTPUT_DIR = "./data/output_tiles"
+LOCATION = "sargans"
+DEM_CSV = f"./data/{LOCATION}/ch.swisstopo.swissalti3d.csv"  # Example DEM tile list
+DOP_CSV = (
+    f"./data/{LOCATION}/ch.swisstopo.swissimage.csv"  # Example orthophoto tile list
+)
+DEM_INPUT_DIR = f"./data/swiss-alti3d-{LOCATION}"
+DOP_INPUT_DIR = f"./data/swiss-image-{LOCATION}"
+OUTPUT_DIR = f"./data/output_tiles-{LOCATION}"
 
 SRS = "EPSG:2056"  # Swiss coordinate system
-CHUNK_PX = 1000  # tile size in pixels for each level of detail
+CHUNK_PX = 500  # tile size in pixels for each level of detail
 MAX_LEVELS = None  # If set to None, the level will be determined automatically so that the highest level is 1x1 tile.
 RESAMPLING = "average"
 
@@ -18,6 +26,43 @@ MOS_DEM_VRT = "mosaic_dem.vrt"
 MOS_DOP_VRT = "mosaic_dop.vrt"
 MOS_DEM_CROP = "mosaic_dem_cropped.vrt"
 MOS_DOP_CROP = "mosaic_dop_cropped.vrt"
+
+
+def download_tiles_from_csv(csv_path: str, output_dir: str):
+    """
+    Reads a Swisstopo CSV file and downloads all GeoTIFF tiles listed inside.
+    Saves them to output_dir (creates if missing).
+    Skips files that already exist.
+    """
+    os.makedirs(output_dir, exist_ok=True)
+
+    urls = []
+    with open(csv_path, newline="", encoding="utf-8") as csvfile:
+        reader = csv.DictReader(csvfile, delimiter=";")
+        for row in reader:
+            # Try to detect URL column dynamically
+            for key in row.keys():
+                if "http" in row[key]:
+                    urls.append(row[key])
+                    break
+
+    print(f"Found {len(urls)} tile URLs in {csv_path}")
+    print(urls)
+
+    for url in tqdm(urls, desc="Downloading tiles"):
+        filename = os.path.basename(url)
+        out_path = Path(output_dir) / filename
+        if out_path.exists():
+            continue
+
+        try:
+            response = requests.get(url, stream=True, timeout=30)
+            response.raise_for_status()
+            with open(out_path, "wb") as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    f.write(chunk)
+        except Exception as e:
+            print(f"Failed to download {url}: {e}")
 
 
 def ensure_clean_dir(path: str):
@@ -348,4 +393,11 @@ def process_all(
 
 
 if __name__ == "__main__":
+    print("Downloading SwissALTI3D tiles...")
+    download_tiles_from_csv(DEM_CSV, DEM_INPUT_DIR)
+
+    print("Downloading SwissIMAGE tiles...")
+    download_tiles_from_csv(DOP_CSV, DOP_INPUT_DIR)
+
+    print("Starting preprocessing pipeline...")
     process_all(DEM_INPUT_DIR, DOP_INPUT_DIR, OUTPUT_DIR, CHUNK_PX, MAX_LEVELS)
