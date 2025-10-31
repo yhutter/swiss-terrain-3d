@@ -1,16 +1,21 @@
 {
   "name": "src",
   "version": "1.0.0",
-  "main": "index.js",
   "scripts": {
-    "dev": "vite"
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "description": "",
   "dependencies": {
-    "three": "^0.180.0",
+    "three": "^0.180.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.180.0",
+    "typescript": "^5.9.3",
     "tweakpane": "^4.0.5",
     "vite": "^7.1.7"
   }

@@ -1,20 +1,18 @@
-import { ACESFilmicToneMapping } from "three"
 import { HDRLoader, OrbitControls } from "three/examples/jsm/Addons.js"
-import { backgroundBlurriness } from "three/tsl"
 import * as THREE from "three/webgpu"
-import { Pane } from "tweakpane"
+import { Pane, FolderApi } from "tweakpane"
 
-let renderer = null
-let camera = null
-let scene = null
+let renderer: THREE.WebGPURenderer | null = null
+let camera: THREE.PerspectiveCamera | null = null
+let scene: THREE.Scene | null = null
 let sizes = {
     width: 0,
     height: 0,
 }
-let clock = null
-let mesh = null
-let pane = null
-let tweaksFolder = null
+let clock: THREE.Clock | null = null
+let mesh: THREE.Mesh | null = null
+let pane: Pane | null = null
+let tweaksFolder: FolderApi | null = null
 let tweaks = {
     wireframe: false,
     background: new THREE.Color(0x000000),
@@ -28,13 +26,13 @@ let tweaks = {
     toneMapping: THREE.ACESFilmicToneMapping,
     backgroundBlurriness: 0.75,
 }
-let textureLoader = null
-let hdrLoader = null
-let controls = null
+let textureLoader: THREE.TextureLoader | null = null
+let hdrLoader: HDRLoader | null = null
+let controls: OrbitControls | null = null
 let elapsedTime = 0
 
 window.onload = async () => {
-    const canvas = document.getElementById("app")
+    const canvas = document.getElementById("app") as HTMLCanvasElement
     renderer = new THREE.WebGPURenderer({
         antialias: true,
         canvas: canvas
@@ -100,8 +98,8 @@ window.onload = async () => {
         label: "Background Color",
         view: "color",
         color: { type: "float" }
-    }).on("change", e => {
-        renderer.setClearColor(e.value)
+    }).on("change", (e) => {
+        renderer!.setClearColor(e.value)
     })
 
     tweaksFolder.addBinding(tweaks, "backgroundBlurriness", {
@@ -109,21 +107,21 @@ window.onload = async () => {
         min: 0,
         max: 1.0,
         step: 0.01
-    }).on("change", e => {
-        scene.backgroundBlurriness = e.value
+    }).on("change", (e) => {
+        scene!.backgroundBlurriness = e.value
     })
 
     tweaksFolder.addBinding(tweaks, "toneMapping", {
         label: "Tone Mapping",
         options: tweaks.toneMappingOptions
-    }).on("change", e => {
-        renderer.toneMapping = e.value
+    }).on("change", (e) => {
+        renderer!.toneMapping = e.value
     })
 
     tweaksFolder.addBinding(tweaks, "wireframe", {
         label: "Wireframe",
-    }).on("change", e => {
-        mesh.material.wireframe = e.value
+    }).on("change", (e) => {
+        (mesh!.material as THREE.MeshStandardNodeMaterial).wireframe = e.value
     })
 
     tweaksFolder.addBinding(tweaks, "animate", {
@@ -135,34 +133,33 @@ window.onload = async () => {
     render()
 }
 
-const resize = () => {
+const resize = (): void => {
     sizes.width = window.innerWidth
     sizes.height = window.innerHeight
 
-    renderer.setSize(sizes.width, sizes.height)
+    renderer!.setSize(sizes.width, sizes.height)
     const pixelRatio = Math.min(2, window.devicePixelRatio)
-    renderer.setPixelRatio(pixelRatio)
+    renderer!.setPixelRatio(pixelRatio)
 
     const aspect = sizes.width / sizes.height
-    camera.aspect = aspect
-    camera.updateProjectionMatrix()
+    camera!.aspect = aspect
+    camera!.updateProjectionMatrix()
 }
 
-const update = () => {
-    const dt = clock.getDelta()
+const update = (): void => {
+    const dt = clock!.getDelta()
     const speed = 0.25
-    controls.update()
+    controls!.update()
 
     if (tweaks.animate) {
         elapsedTime += dt
-        mesh.rotateY(Math.PI * dt * speed)
+        mesh!.rotateY(Math.PI * dt * speed)
 
     }
-
 }
 
-const render = () => {
+const render = (): void => {
     update()
-    renderer.render(scene, camera)
+    renderer!.render(scene!, camera!)
     window.requestAnimationFrame(render)
 }
