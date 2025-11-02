@@ -6,9 +6,11 @@ from pathlib import Path
 from osgeo import gdal
 import csv
 import requests
+import re
 from tqdm import tqdm
+from urllib.parse import urlparse
 
-LOCATION = "sargans"
+LOCATION = "chur"
 DEM_CSV = f"./data/{LOCATION}/ch.swisstopo.swissalti3d.csv"  # Example DEM tile list
 DOP_CSV = (
     f"./data/{LOCATION}/ch.swisstopo.swissimage.csv"  # Example orthophoto tile list
@@ -18,7 +20,7 @@ DOP_INPUT_DIR = f"./data/swiss-image-{LOCATION}"
 OUTPUT_DIR = f"./data/output_tiles-{LOCATION}"
 
 SRS = "EPSG:2056"  # Swiss coordinate system
-CHUNK_PX = 500  # tile size in pixels for each level of detail should be cleanly divisible by the tile size of swisstopo (e.g 1kmx1km)
+CHUNK_PX = 1000  # tile size in pixels for each level of detail should be cleanly divisible by the tile size of swisstopo (e.g 1kmx1km)
 MAX_LEVELS = None  # If set to None, the level will be determined automatically so that the highest level is 1x1 tile.
 RESAMPLING = "average"
 
@@ -28,32 +30,100 @@ MOS_DEM_CROP = "mosaic_dem_cropped.vrt"
 MOS_DOP_CROP = "mosaic_dop_cropped.vrt"
 
 
+def create_dem_url(year: int, east: int, north: int, resolution: int = 2) -> str:
+    return f"https://data.geo.admin.ch/ch.swisstopo.swissalti3d/swissalti3d_{year}_{east}-{north}/swissalti3d_{year}_{east}-{north}_{resolution}_2056_5728.tif"
+
+
+def create_dop_url(year: int, east: int, north: int, resolution: int = 2) -> str:
+    return f"https://data.geo.admin.ch/ch.swisstopo.swissimage-dop10/swissimage-dop10_{year}_{east}-{north}/swissimage-dop10_{year}_{east}-{north}_{resolution}_2056.tif"
+
+
+def patch_swisstopo_csv(csv_path, output_csv_path, type="dem"):
+    """
+    Reads a SwissTopo CSV of image URLs, detects missing 1 km LV95 tiles,
+    and adds URLs for the missing grid cells.
+    This is necessary because there might be a few tiles missing around the borders.
+    """
+    rows = []
+    with open(csv_path, newline="") as f:
+        reader = csv.reader(f)
+        for r in reader:
+            if not r:
+                continue
+            url = r[0].strip()
+            m = re.search(r"(\d{4})_(\d{4})-(\d{4})", url)
+            if not m:
+                continue
+            year, east, north = m.groups()
+            rows.append((int(year), int(east), int(north), url))
+
+    if not rows:
+        print("[ERROR] No valid URLs found in CSV.")
+        return
+
+    # Determine grid extents
+    years = sorted({r[0] for r in rows})
+    easts = sorted({r[1] for r in rows})
+    norths = sorted({r[2] for r in rows})
+
+    # TODO: Also check one period before the minimum year
+
+    # Iterate through east and north ranges to find missing tiles
+    missing = []
+    for e in range(easts[0], easts[-1] + 1):
+        for n in range(norths[0], norths[-1] + 1):
+            # Check if tile exists
+            if not any((r[1] == e and r[2] == n) for r in rows):
+                # We take a shortcut here and just insert an url for all available years.
+                # Guessing the year would be error prone. In the worst case we get a few failed requests.
+                for year in years:
+                    missing.append((year, e, n))
+
+    print(f"[INFO] Found missing tiles in {len(easts)}×{len(norths)} grid.")
+
+    new_urls = []
+    for m in missing:
+        year = m[0]
+        e = m[1]
+        n = m[2]
+        if type == "dem":
+            url = create_dem_url(year, e, n)
+        else:
+            url = create_dop_url(year, e, n)
+        new_urls.append(str(url))
+
+    # --- Write combined CSV ---
+    with open(output_csv_path, "w", newline="") as f:
+        writer = csv.writer(f)
+        for _, _, _, url in rows:
+            writer.writerow([url])
+        for url in new_urls:
+            writer.writerow([url])
+
+    print(
+        f"[OK] Wrote patched CSV with {len(rows) + len(new_urls)} total URLs to {output_csv_path}."
+    )
+
+
 def download_tiles_from_csv(csv_path: str, output_dir: str):
     """
     Reads a Swisstopo CSV file and downloads all GeoTIFF tiles listed inside.
     Saves them to output_dir (creates if missing).
-    Skips files that already exist.
     """
     os.makedirs(output_dir, exist_ok=True)
 
     urls = []
     with open(csv_path, newline="", encoding="utf-8") as csvfile:
-        reader = csv.DictReader(csvfile, delimiter=";")
+        reader = csv.reader(csvfile, delimiter=";")
         for row in reader:
-            # Try to detect URL column dynamically
-            for key in row.keys():
-                if "http" in row[key]:
-                    urls.append(row[key])
-                    break
+            url = row[0].strip()
+            urls.append(url)
 
     print(f"Found {len(urls)} tile URLs in {csv_path}")
 
     for url in tqdm(urls, desc="Downloading tiles"):
         filename = os.path.basename(url)
         out_path = Path(output_dir) / filename
-        if out_path.exists():
-            continue
-
         try:
             response = requests.get(url, stream=True, timeout=30)
             response.raise_for_status()
@@ -438,11 +508,29 @@ def process_all(
 
 
 if __name__ == "__main__":
+    use_patching = True
+
+    if use_patching:
+        DEM_CSV_PATCHED = f"{DEM_CSV}.patched"
+        print("Patching SwissALTI3D CSV for missing tiles...")
+        patch_swisstopo_csv(DEM_CSV, DEM_CSV_PATCHED, type="dem")
+
     print("Downloading SwissALTI3D tiles...")
-    download_tiles_from_csv(DEM_CSV, DEM_INPUT_DIR)
+    if use_patching:
+        download_tiles_from_csv(DEM_CSV_PATCHED, DEM_INPUT_DIR)
+    else:
+        download_tiles_from_csv(DEM_CSV, DEM_INPUT_DIR)
+
+    if use_patching:
+        DOP_CSV_PATCHED = f"{DOP_CSV}.patched"
+        print("Patching SwissIMAGE CSV for missing tiles...")
+        patch_swisstopo_csv(DOP_CSV, DOP_CSV_PATCHED, type="dop")
 
     print("Downloading SwissIMAGE tiles...")
-    download_tiles_from_csv(DOP_CSV, DOP_INPUT_DIR)
+    if use_patching:
+        download_tiles_from_csv(DOP_CSV_PATCHED, DOP_INPUT_DIR)
+    else:
+        download_tiles_from_csv(DOP_CSV, DOP_INPUT_DIR)
 
     print("Starting preprocessing pipeline...")
     process_all(DEM_INPUT_DIR, DOP_INPUT_DIR, OUTPUT_DIR, CHUNK_PX, MAX_LEVELS)
