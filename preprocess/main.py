@@ -18,7 +18,7 @@ DOP_INPUT_DIR = f"./data/swiss-image-{LOCATION}"
 OUTPUT_DIR = f"./data/output_tiles-{LOCATION}"
 
 SRS = "EPSG:2056"  # Swiss coordinate system
-CHUNK_PX = 500  # tile size in pixels for each level of detail
+CHUNK_PX = 500  # tile size in pixels for each level of detail should be cleanly divisible by the tile size of swisstopo (e.g 1kmx1km)
 MAX_LEVELS = None  # If set to None, the level will be determined automatically so that the highest level is 1x1 tile.
 RESAMPLING = "average"
 
@@ -115,7 +115,9 @@ def decide_max_levels(
     return max_level + 1
 
 
-def crop_to_divisible_grid(src_vrt: str, out_vrt: str, chunk_px: int, levels: int):
+def crop_to_divisible_square_grid(
+    src_vrt: str, out_vrt: str, chunk_px: int, levels: int
+):
     """
     Crops the input VRT so that its dimensions are cleanly divisible by the requested chunk size and levels.
     """
@@ -129,6 +131,10 @@ def crop_to_divisible_grid(src_vrt: str, out_vrt: str, chunk_px: int, levels: in
         raise RuntimeError(
             "Cropping removed too much — reduce levels or use larger input."
         )
+
+    # Make it square by shrinking the longer dimension
+    side = min(W_crop, H_crop)
+    W_crop = H_crop = side
 
     maxx_crop = minx + W_crop * px
     miny_crop = maxy - H_crop * py
@@ -336,10 +342,10 @@ def process_all(
     )
 
     # Crop both mosaics to same extent
-    dem_crop, extent = crop_to_divisible_grid(
+    dem_crop, extent = crop_to_divisible_square_grid(
         dem_vrt, str(Path(out_dir) / MOS_DEM_CROP), chunk_px, levels
     )
-    dop_crop, _ = crop_to_divisible_grid(
+    dop_crop, _ = crop_to_divisible_square_grid(
         dop_vrt, str(Path(out_dir) / MOS_DOP_CROP), chunk_px, levels
     )
 
