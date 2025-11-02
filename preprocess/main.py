@@ -47,7 +47,6 @@ def download_tiles_from_csv(csv_path: str, output_dir: str):
                     break
 
     print(f"Found {len(urls)} tile URLs in {csv_path}")
-    print(urls)
 
     for url in tqdm(urls, desc="Downloading tiles"):
         filename = os.path.basename(url)
@@ -215,13 +214,44 @@ def tile_vrt_lod(level_vrt: str, out_dir: str, chunk_px: int):
     ds = None
 
 
+def generate_empty_image(width, height, color, output_file):
+    """
+    Generates an empty RGB PNG image of the specified size and filled with the given color.
+    Note that color should be a value between 0 and 255.
+    """
+    mem_driver = gdal.GetDriverByName("MEM")
+    mem_ds = mem_driver.Create("", width, height, 1, gdal.GDT_UInt16)
+    band = mem_ds.GetRasterBand(1)
+    band.Fill(color)
+
+    # 2. Copy to disk using CreateCopy
+    png_driver = gdal.GetDriverByName("PNG")
+    png_driver.CreateCopy(output_file, mem_ds, strict=0)
+
+    mem_ds = None
+    print(f"[INFO] Created empty height map: {output_file}")
+
+
 def generate_height_map_from_tif(input_file, output_file, scale):
     """
     Generates a height map from the input GeoTIFF file, scaling elevation values to the specified range.
     """
     ds = gdal.Open(input_file)
     band = ds.GetRasterBand(1)
-    min_val, max_val, mean_val, _ = band.GetStatistics(True, True)
+
+    try:
+        stats = band.GetStatistics(True, True)
+    except RuntimeError:
+        stats = None
+
+    if stats is None:
+        print(f"Could not compute statistics for {input_file}")
+        print("Generating empty height map instead.")
+        ds = None
+        generate_empty_image(CHUNK_PX, CHUNK_PX, 0, output_file)
+        return
+
+    min_val, max_val, mean_val, _ = stats
 
     translate_options = gdal.TranslateOptions(
         format="PNG",
@@ -256,13 +286,23 @@ def generate_image_from_tif(input_file, output_file):
 
 def get_tile_metadata(tile_path: Path):
     ds = gdal.Open(str(tile_path))
-    if ds is None:
-        return None
-
     band = ds.GetRasterBand(1)
-    stats = band.GetStatistics(True, True)
-    if stats is None:
-        return None
+    try:
+        stats = band.GetStatistics(True, True)
+    except RuntimeError:
+        print(f"Could not compute statistics for {tile_path}")
+        stats = None
+
+    if stats is None or ds is None:
+        return {
+            "path": str(tile_path),
+            "valid": False,
+            "bbox": None,
+            "size": None,
+            "min": None,
+            "max": None,
+            "mean": None,
+        }
 
     gt = ds.GetGeoTransform()
     width, height = ds.RasterXSize, ds.RasterYSize
@@ -272,6 +312,7 @@ def get_tile_metadata(tile_path: Path):
 
     return {
         "path": str(tile_path),
+        "valid": True,
         "bbox": [minx, miny, maxx, maxy],
         "size": [width, height],
         "min": stats[0],
@@ -286,9 +327,6 @@ def collect_metadata(dem_root: Path, dop_root: Path, levels: int):
         dem_tiles = list((dem_root / f"level_{L}" / "tiles").glob("*.tif"))
         for dem_tile in dem_tiles:
             info = get_tile_metadata(dem_tile)
-            if info is None:
-                continue
-
             ty, tx = [int(x) for x in dem_tile.stem.split("_")[1:3]]
             dem_image_path = Path(f"{dem_tile}.png")
             dop_tile = dop_root / f"level_{L}" / "tiles" / f"tile_{ty:03d}_{tx:03d}.tif"
@@ -296,6 +334,7 @@ def collect_metadata(dem_root: Path, dop_root: Path, levels: int):
 
             entry = {
                 "id": f"L{L}_{ty:03d}_{tx:03d}",
+                "valid": info["valid"],
                 "level": L,
                 "tile_x": tx,
                 "tile_y": ty,
