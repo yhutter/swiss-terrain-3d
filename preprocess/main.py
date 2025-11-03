@@ -8,7 +8,9 @@ import csv
 import requests
 import re
 from tqdm import tqdm
-from urllib.parse import urlparse
+
+DOP_UPDATE_CYCLE_YEARS = 3
+DEM_UPDATE_CYCLE_YEARS = 6
 
 LOCATION = "chur"
 DEM_CSV = f"./data/{LOCATION}/ch.swisstopo.swissalti3d.csv"  # Example DEM tile list
@@ -18,6 +20,7 @@ DOP_CSV = (
 DEM_INPUT_DIR = f"./data/swiss-alti3d-{LOCATION}"
 DOP_INPUT_DIR = f"./data/swiss-image-{LOCATION}"
 OUTPUT_DIR = f"./data/output_tiles-{LOCATION}"
+
 
 SRS = "EPSG:2056"  # Swiss coordinate system
 CHUNK_PX = 1000  # tile size in pixels for each level of detail should be cleanly divisible by the tile size of swisstopo (e.g 1kmx1km)
@@ -38,13 +41,24 @@ def create_dop_url(year: int, east: int, north: int, resolution: int = 2) -> str
     return f"https://data.geo.admin.ch/ch.swisstopo.swissimage-dop10/swissimage-dop10_{year}_{east}-{north}/swissimage-dop10_{year}_{east}-{north}_{resolution}_2056.tif"
 
 
+def create_swisstopo_url(
+    type: str, year: int, east: int, north: int, resolution: int = 2
+) -> str:
+    if type == "dem":
+        return create_dem_url(year, east, north, resolution)
+    elif type == "dop":
+        return create_dop_url(year, east, north, resolution)
+    else:
+        raise ValueError(f"Unknown type: {type}")
+
+
 def patch_swisstopo_csv(csv_path, output_csv_path, type="dem"):
     """
     Reads a SwissTopo CSV of image URLs, detects missing 1 km LV95 tiles,
     and adds URLs for the missing grid cells.
     This is necessary because there might be a few tiles missing around the borders.
     """
-    rows = []
+    url_infos = []
     with open(csv_path, newline="") as f:
         reader = csv.reader(f)
         for r in reader:
@@ -55,54 +69,87 @@ def patch_swisstopo_csv(csv_path, output_csv_path, type="dem"):
             if not m:
                 continue
             year, east, north = m.groups()
-            rows.append((int(year), int(east), int(north), url))
+            url_info = {
+                "year": int(year),
+                "east": int(east),
+                "north": int(north),
+                "url": url,
+            }
+            url_infos.append(url_info)
 
-    if not rows:
+    if not url_infos:
         print("[ERROR] No valid URLs found in CSV.")
         return
 
     # Determine grid extents
-    years = sorted({r[0] for r in rows})
-    easts = sorted({r[1] for r in rows})
-    norths = sorted({r[2] for r in rows})
-
-    # TODO: Also check one period before the minimum year
+    easts = sorted({info["east"] for info in url_infos})
+    norths = sorted({info["north"] for info in url_infos})
 
     # Iterate through east and north ranges to find missing tiles
-    missing = []
+    missings = []
     for e in range(easts[0], easts[-1] + 1):
         for n in range(norths[0], norths[-1] + 1):
-            # Check if tile exists
-            if not any((r[1] == e and r[2] == n) for r in rows):
-                # We take a shortcut here and just insert an url for all available years.
-                # Guessing the year would be error prone. In the worst case we get a few failed requests.
+            # If it is missing take the years from the closest matching tiles with the same northing
+            is_missing = not any(
+                info["east"] == e and info["north"] == n for info in url_infos
+            )
+            if is_missing:
+                years = set(info["year"] for info in url_infos if info["north"] == n)
                 for year in years:
-                    missing.append((year, e, n))
+                    missings.append((year, e, n))
 
     print(f"[INFO] Found missing tiles in {len(easts)}×{len(norths)} grid.")
 
-    new_urls = []
-    for m in missing:
+    new_url_infos = []
+    for m in missings:
         year = m[0]
         e = m[1]
         n = m[2]
-        if type == "dem":
-            url = create_dem_url(year, e, n)
-        else:
-            url = create_dop_url(year, e, n)
-        new_urls.append(str(url))
+        url = create_swisstopo_url(type, year, e, n)
+        new_url_info = {
+            "year": year,
+            "east": e,
+            "north": n,
+            "url": url,
+            "type": type,
+        }
+        new_url_infos.append(new_url_info)
 
-    # --- Write combined CSV ---
+    # Write combined CSV sorted by year in ascending order
+    combined_url_infos = url_infos + new_url_infos
+    combined_url_infos.sort(key=lambda x: (x["year"]), reverse=True)
     with open(output_csv_path, "w", newline="") as f:
-        writer = csv.writer(f)
-        for _, _, _, url in rows:
-            writer.writerow([url])
-        for url in new_urls:
-            writer.writerow([url])
-
+        writer = csv.DictWriter(
+            f, delimiter=";", fieldnames=["year", "north", "east", "type", "url"]
+        )
+        writer.writeheader()
+        for info in combined_url_infos:
+            # Write out rows with keys
+            writer.writerow(
+                {
+                    "year": info["year"],
+                    "north": info["north"],
+                    "east": info["east"],
+                    "type": type,
+                    "url": info["url"],
+                }
+            )
     print(
-        f"[OK] Wrote patched CSV with {len(rows) + len(new_urls)} total URLs to {output_csv_path}."
+        f"[OK] Wrote patched CSV with {len(combined_url_infos)} total URLs to {output_csv_path}."
     )
+
+
+def try_download_tile(url: str, out_path: Path) -> bool:
+    try:
+        response = requests.get(url, stream=True, timeout=30)
+        response.raise_for_status()
+        with open(out_path, "wb") as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                f.write(chunk)
+        return True
+
+    except Exception:
+        return False
 
 
 def download_tiles_from_csv(csv_path: str, output_dir: str):
@@ -112,26 +159,79 @@ def download_tiles_from_csv(csv_path: str, output_dir: str):
     """
     os.makedirs(output_dir, exist_ok=True)
 
-    urls = []
+    url_infos = []
     with open(csv_path, newline="", encoding="utf-8") as csvfile:
-        reader = csv.reader(csvfile, delimiter=";")
+        reader = csv.DictReader(csvfile, delimiter=";")
         for row in reader:
-            url = row[0].strip()
-            urls.append(url)
+            url = row["url"].strip()
+            north = int(row["north"])
+            east = int(row["east"])
+            type = row["type"]
+            year = int(row["year"])
+            url_info = {
+                "year": year,
+                "east": east,
+                "north": north,
+                "type": type,
+                "url": url,
+            }
+            url_infos.append(url_info)
 
-    print(f"Found {len(urls)} tile URLs in {csv_path}")
+    print(f"Found {len(url_infos)} tile URLs in {csv_path}")
 
-    for url in tqdm(urls, desc="Downloading tiles"):
+    for url_info in tqdm(url_infos, desc="Downloading tiles"):
+        downloaded = url_info.get("downloaded", False)
+        if downloaded:
+            print(f"Skipping already downloaded tile: {url_info['url']}")
+            continue
+
+        url = url_info["url"]
+        year = url_info["year"]
+        type = url_info["type"]
+        east = url_info["east"]
+        north = url_info["north"]
+
         filename = os.path.basename(url)
         out_path = Path(output_dir) / filename
-        try:
-            response = requests.get(url, stream=True, timeout=30)
-            response.raise_for_status()
-            with open(out_path, "wb") as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    f.write(chunk)
-        except Exception as e:
-            print(f"Failed to download {url}: {e}")
+        if not try_download_tile(url, out_path):
+            print(f"Failed to download {url}")
+            print("Retrying once with one period in the past")
+            if type == "dem":
+                update_cycle = DEM_UPDATE_CYCLE_YEARS
+            else:
+                update_cycle = DOP_UPDATE_CYCLE_YEARS
+            past_year = year - update_cycle
+            url = create_swisstopo_url(type, past_year, east, north)
+            if not try_download_tile(url, out_path):
+                print(f"Failed to download {url}")
+                print("Retrying in between the periods...")
+                success = False
+                for offset in range(1, update_cycle):
+                    inter_year = year - offset
+                    print(f"Trying year {inter_year}...")
+                    url = create_swisstopo_url(type, inter_year, east, north)
+                    # Break out on first success
+                    if try_download_tile(url, out_path):
+                        success = True
+                        print(f"Successfully downloaded with {url}")
+                        # Mark other infos with same east and north as skipped
+                        for info in url_infos:
+                            if info["east"] == east and info["north"] == north:
+                                info["downloaded"] = True
+                        break
+                # No result found
+                if not success:
+                    print(f"Failed to download {url}")
+            else:
+                # Mark other infos with same east and north as skipped
+                for info in url_infos:
+                    if info["east"] == east and info["north"] == north:
+                        info["downloaded"] = True
+        else:
+            # Mark other infos with same east and north as skipped
+            for info in url_infos:
+                if info["east"] == east and info["north"] == north:
+                    info["downloaded"] = True
 
 
 def ensure_clean_dir(path: str):
