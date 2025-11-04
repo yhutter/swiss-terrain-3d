@@ -26,6 +26,7 @@ export class App {
         },
         toneMapping: THREE.ACESFilmicToneMapping,
         backgroundBlurriness: 0.75,
+        displacementScale: 0.16,
     }
     private textureLoader!: THREE.TextureLoader
     private hdrLoader!: HDRLoader
@@ -62,10 +63,12 @@ export class App {
 
 
         this.textureLoader = new THREE.TextureLoader()
-        const texture = await this.textureLoader.loadAsync("/static/maps/texture.jpg")
+        const texturePath = "/static/data/output_tiles-sargans/dop/level_1/tiles/tile_000_000.tif.png"
+        const texture = await this.textureLoader.loadAsync(texturePath)
         texture.colorSpace = THREE.SRGBColorSpace
 
-        const heightMap = await this.textureLoader.loadAsync("/static/maps/height.png")
+        const heightMapPath = "/static/data/output_tiles-sargans/dem/level_1/tiles/tile_000_000.tif.png"
+        const heightMap = await this.textureLoader.loadAsync(heightMapPath)
 
         const size = 1
         const resolution = 512
@@ -76,6 +79,7 @@ export class App {
             wireframe: this.tweaks.wireframe,
             map: texture,
             displacementMap: heightMap,
+            displacementScale: this.tweaks.displacementScale,
         })
 
         this.mesh = new THREE.Mesh(geo, mat)
@@ -117,6 +121,15 @@ export class App {
             step: 0.01
         }).on("change", (e) => {
             this.scene.backgroundBlurriness = e.value
+        })
+
+        this.tweaksFolder.addBinding(this.tweaks, "displacementScale", {
+            label: "Displacement Scale",
+            min: 0,
+            max: 5.0,
+            step: 0.01
+        }).on("change", (e) => {
+            (this.mesh.material as THREE.MeshStandardNodeMaterial).displacementScale = e.value
         })
 
         this.tweaksFolder.addBinding(this.tweaks, "toneMapping", {

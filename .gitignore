@@ -1,5 +1,6 @@
 # Generated data output from preprocessing
 preprocess/data/
+src/static/data/
 
 # Logs
 logs
