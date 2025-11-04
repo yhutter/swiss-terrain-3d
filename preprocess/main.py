@@ -12,25 +12,7 @@ from tqdm import tqdm
 DOP_UPDATE_CYCLE_YEARS = 3
 DEM_UPDATE_CYCLE_YEARS = 6
 
-LOCATION = "chur"
-DEM_CSV = f"./data/{LOCATION}/ch.swisstopo.swissalti3d.csv"  # Example DEM tile list
-DOP_CSV = (
-    f"./data/{LOCATION}/ch.swisstopo.swissimage.csv"  # Example orthophoto tile list
-)
-DEM_INPUT_DIR = f"./data/swiss-alti3d-{LOCATION}"
-DOP_INPUT_DIR = f"./data/swiss-image-{LOCATION}"
-OUTPUT_DIR = f"./data/output_tiles-{LOCATION}"
-
-
 SRS = "EPSG:2056"  # Swiss coordinate system
-CHUNK_PX = 1000  # tile size in pixels for each level of detail should be cleanly divisible by the tile size of swisstopo (e.g 1kmx1km)
-MAX_LEVELS = None  # If set to None, the level will be determined automatically so that the highest level is 1x1 tile.
-RESAMPLING = "average"
-
-MOS_DEM_VRT = "mosaic_dem.vrt"
-MOS_DOP_VRT = "mosaic_dop.vrt"
-MOS_DEM_CROP = "mosaic_dem_cropped.vrt"
-MOS_DOP_CROP = "mosaic_dop_cropped.vrt"
 
 
 def create_dem_url(year: int, east: int, north: int, resolution: int = 2) -> str:
@@ -260,16 +242,10 @@ def build_vrt(input_dir: str, out_vrt: str):
     gdal.BuildVRT(out_vrt, files)
 
 
-def decide_max_levels(
-    width_px: int, height_px: int, chunk_px: int, max_level_overwrite
-):
+def decide_max_levels(width_px: int, height_px: int, chunk_px: int):
     """
     Decide the maximum number of LOD levels based on input dimensions and chunk size so that the highest level is 1x1 tile.
-    Can be overwritten by max_level_overwrite.
     """
-    if max_level_overwrite is not None:
-        return max_level_overwrite
-
     tiles_x = width_px / chunk_px
     tiles_y = height_px / chunk_px
     min_tiles = min(tiles_x, tiles_y)
@@ -397,7 +373,7 @@ def generate_empty_image(width, height, color, output_file):
     print(f"[INFO] Created empty height map: {output_file}")
 
 
-def generate_height_map_from_tif(input_file, output_file, scale):
+def generate_height_map_from_tif(input_file, output_file, scale, size):
     """
     Generates a height map from the input GeoTIFF file, scaling elevation values to the specified range.
     """
@@ -413,7 +389,7 @@ def generate_height_map_from_tif(input_file, output_file, scale):
         print(f"Could not compute statistics for {input_file}")
         print("Generating empty height map instead.")
         ds = None
-        generate_empty_image(CHUNK_PX, CHUNK_PX, 0, output_file)
+        generate_empty_image(size, size, 0, output_file)
         return
 
     min_val, max_val, mean_val, _ = stats
@@ -521,9 +497,7 @@ def collect_metadata(dem_root: Path, dop_root: Path, levels: int):
     return metadata
 
 
-def process_all(
-    dem_input: str, dop_input: str, out_dir: str, chunk_px: int, max_levels_cfg
-):
+def process_all(dem_input: str, dop_input: str, out_dir: str, chunk_px: int):
     """
     Main processing function to build and tile DEM and Image LOD pyramids.
     """
@@ -540,7 +514,7 @@ def process_all(
     _, (W, H), _ = get_raster_info(ds_dem)
     ds_dem = None
 
-    levels = decide_max_levels(W, H, chunk_px, max_levels_cfg)
+    levels = decide_max_levels(W, H, chunk_px)
     print(
         f"DEM/Image base size: {W}×{H} px → {levels} levels (L0..L{levels - 1}), top = 1×1 tile"
     )
@@ -582,7 +556,7 @@ def process_all(
         for dem_tile in dem_tiles:
             height_map_path = dem_tile.parent / f"{dem_tile.name}.png"
             generate_height_map_from_tif(
-                str(dem_tile), str(height_map_path), scale=(0, 65535)
+                str(dem_tile), str(height_map_path), scale=(0, 65535), size=chunk_px
             )
 
     print("\nGenerating DOP images...")
@@ -604,28 +578,53 @@ def process_all(
 
 if __name__ == "__main__":
     use_patching = True
+    config_file_path = "./preprocess-config.json"
+
+    # Load parameters from json config
+    if not os.path.exists(config_file_path):
+        raise RuntimeError(f"Config file not found: {config_file_path}")
+
+    with open(config_file_path, "r") as f:
+        config = json.load(f)
+        use_patching = config.get("use_patching", True)
+        dem_csv_path = config.get("dem_csv_path", None)
+        dop_csv_path = config.get("dop_csv_path", None)
+        dem_download_dir = config.get("dem_download_dir", None)
+        dop_download_dir = config.get("dop_download_dir", None)
+        output_dir = config.get("output_dir", None)
+        tile_size_px = config.get("tile_size_px", 500)
+        print("Config file found. Using the following parameters:")
+        print(json.dumps(config, indent=2))
+
+    MAX_LEVELS = None  # If set to None, the level will be determined automatically so that the highest level is 1x1 tile.
+    RESAMPLING = "average"
+
+    MOS_DEM_VRT = "mosaic_dem.vrt"
+    MOS_DOP_VRT = "mosaic_dop.vrt"
+    MOS_DEM_CROP = "mosaic_dem_cropped.vrt"
+    MOS_DOP_CROP = "mosaic_dop_cropped.vrt"
 
     if use_patching:
-        DEM_CSV_PATCHED = f"{DEM_CSV}.patched"
+        dem_csv_patched_path = f"{dem_csv_path}.patched"
         print("Patching SwissALTI3D CSV for missing tiles...")
-        patch_swisstopo_csv(DEM_CSV, DEM_CSV_PATCHED, type="dem")
+        patch_swisstopo_csv(dem_csv_path, dem_csv_patched_path, type="dem")
 
     print("Downloading SwissALTI3D tiles...")
     if use_patching:
-        download_tiles_from_csv(DEM_CSV_PATCHED, DEM_INPUT_DIR)
+        download_tiles_from_csv(dem_csv_patched_path, dem_download_dir)
     else:
-        download_tiles_from_csv(DEM_CSV, DEM_INPUT_DIR)
+        download_tiles_from_csv(dem_csv_path, dem_download_dir)
 
     if use_patching:
-        DOP_CSV_PATCHED = f"{DOP_CSV}.patched"
+        dop_csv_patched_path = f"{dop_csv_path}.patched"
         print("Patching SwissIMAGE CSV for missing tiles...")
-        patch_swisstopo_csv(DOP_CSV, DOP_CSV_PATCHED, type="dop")
+        patch_swisstopo_csv(dop_csv_path, dop_csv_patched_path, type="dop")
 
     print("Downloading SwissIMAGE tiles...")
     if use_patching:
-        download_tiles_from_csv(DOP_CSV_PATCHED, DOP_INPUT_DIR)
+        download_tiles_from_csv(dop_csv_patched_path, dop_download_dir)
     else:
-        download_tiles_from_csv(DOP_CSV, DOP_INPUT_DIR)
+        download_tiles_from_csv(dop_csv_path, dop_download_dir)
 
     print("Starting preprocessing pipeline...")
-    process_all(DEM_INPUT_DIR, DOP_INPUT_DIR, OUTPUT_DIR, CHUNK_PX, MAX_LEVELS)
+    process_all(dem_download_dir, dop_download_dir, output_dir, tile_size_px)

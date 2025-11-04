@@ -1,0 +1,9 @@
+{
+    "use_patching": true,
+    "dem_csv_path": "./data/sargans/ch.swisstopo.swissalti3d.csv",
+    "dop_csv_path": "./data/sargans/ch.swisstopo.swissimage.csv",
+    "dem_download_dir": "./data/swiss-alti3d-sargans",
+    "dop_download_dir": "./data/swiss-image-sargans",
+    "output_dir": "./data/output_tiles-sargans",
+    "tile_size_px": 1000
+}
