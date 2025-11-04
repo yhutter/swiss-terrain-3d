@@ -194,34 +194,29 @@ def download_tiles_from_csv(csv_path: str, output_dir: str):
         filename = os.path.basename(url)
         out_path = Path(output_dir) / filename
         if not try_download_tile(url, out_path):
-            print(f"Failed to download {url}")
-            print("Retrying once with one period in the past")
             if type == "dem":
                 update_cycle = DEM_UPDATE_CYCLE_YEARS
             else:
                 update_cycle = DOP_UPDATE_CYCLE_YEARS
-            past_year = year - update_cycle
-            url = create_swisstopo_url(type, past_year, east, north)
-            if not try_download_tile(url, out_path):
+            print(f"Failed to download {url}")
+            print("Retrying until past update period...")
+            success = False
+            for offset in range(1, update_cycle):
+                inter_year = year - offset
+                print(f"Trying year {inter_year}...")
+                url = create_swisstopo_url(type, inter_year, east, north)
+                # Break out on first success
+                if try_download_tile(url, out_path):
+                    success = True
+                    print(f"Successfully downloaded with {url}")
+                    # Mark other infos with same east and north as skipped
+                    for info in url_infos:
+                        if info["east"] == east and info["north"] == north:
+                            info["downloaded"] = True
+                    break
+            # No result found
+            if not success:
                 print(f"Failed to download {url}")
-                print("Retrying in between the periods...")
-                success = False
-                for offset in range(1, update_cycle):
-                    inter_year = year - offset
-                    print(f"Trying year {inter_year}...")
-                    url = create_swisstopo_url(type, inter_year, east, north)
-                    # Break out on first success
-                    if try_download_tile(url, out_path):
-                        success = True
-                        print(f"Successfully downloaded with {url}")
-                        # Mark other infos with same east and north as skipped
-                        for info in url_infos:
-                            if info["east"] == east and info["north"] == north:
-                                info["downloaded"] = True
-                        break
-                # No result found
-                if not success:
-                    print(f"Failed to download {url}")
             else:
                 # Mark other infos with same east and north as skipped
                 for info in url_infos:
