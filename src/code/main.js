@@ -1,4 +1,4 @@
-import { App } from './app.ts'
+import { App } from './app.js'
 
 window.onload = async () => {
     const app = new App()
