@@ -1,6 +1,7 @@
 import * as THREE from "three/build/three.webgpu"
 import { TerrainTileParams } from './TerrainTileParams';
 import { App } from './App.js';
+import { GeometryHelper } from './GeometryHelper.js';
 
 export class TerrainTile {
     /** @type {THREE.Mesh?} */
@@ -27,27 +28,23 @@ export class TerrainTile {
      */
     constructor(params) {
         this.#params = params
-    }
+        const resolution = this.#params.resolution
+        const size = this.#params.size
 
-    async create() {
-        const texture = await App.instance.textureLoader.loadAsync(this.#params.dopPath)
-        texture.colorSpace = THREE.SRGBColorSpace
+        const geo = GeometryHelper.createRegularGridGeometry(resolution, size)
+        geo.rotateX(-Math.PI * 0.5)
 
-        const heightMap = await App.instance.textureLoader.loadAsync(this.#params.demPath)
-
-        const geo = new THREE.PlaneGeometry(this.#params.size, this.#params.size, this.#params.resolution, this.#params.resolution)
         this.#material = new THREE.MeshStandardNodeMaterial({
             color: 0xffffff,
             side: THREE.DoubleSide,
             wireframe: this.#tweaks.wireframe,
-            map: texture,
-            displacementMap: heightMap,
+            map: this.#params.dopTexture,
+            displacementMap: this.#params.demTexture,
             displacementScale: this.#tweaks.displacementScale,
         })
 
         this.#mesh = new THREE.Mesh(geo, this.#material)
-        this.#mesh.geometry.rotateX(-Math.PI * 0.5)
-
+        this.#mesh.position.z = 1
         this.#setupTweaks()
     }
 

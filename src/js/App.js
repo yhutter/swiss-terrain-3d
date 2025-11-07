@@ -18,8 +18,8 @@ export class App {
     /** @type {THREE.Clock} */
     #clock
 
-    /** @type {TerrainTile} */
-    #terrainTile
+    /** @type {TerrainTile?} */
+    #terrainTile = null
 
 
     /** @type {Pane} */
@@ -45,7 +45,6 @@ export class App {
     #tweaks = {
         wireframe: false,
         background: new THREE.Color(0x000000),
-        animate: false,
         toneMappingOptions: {
             "None": THREE.NoToneMapping,
             "Agx": THREE.AgXToneMapping,
@@ -53,8 +52,6 @@ export class App {
             "Reinhard": THREE.ReinhardToneMapping,
         },
         toneMapping: THREE.NoToneMapping,
-        backgroundBlurriness: 0.75,
-        displacementScale: 0.16,
     }
 
     /** @type {App} */
@@ -96,7 +93,7 @@ export class App {
 
         const aspect = this.#sizes.width / this.#sizes.height
         this.#camera = new THREE.PerspectiveCamera(75, aspect, 0.01, 1000)
-        this.#camera.position.set(0, 1, 1)
+        this.#camera.position.set(0, 1, 2)
 
         this.#orbitControls = new OrbitControls(this.#camera, this.#renderer.domElement)
         this.#orbitControls.enableDamping = true
@@ -125,13 +122,18 @@ export class App {
     }
 
     async #setupTerrainTile() {
-        const texturePath = "/static/data/output_tiles-sargans/dop/level_1/tiles/tile_000_000.tif.png"
-        const heightMapPath = "/static/data/output_tiles-sargans/dem/level_1/tiles/tile_000_000.tif.png"
+        App.instance.textureLoader.setPath("/static/data/output_tiles-sargans/")
+        const dopTexturePath = "dop/level_1/tiles/tile_000_000.tif.png"
+        const demTexturePath = "dem/level_1/tiles/tile_000_000.tif.png"
 
-        const terrainTileParams = new TerrainTileParams(1, 512, texturePath, heightMapPath)
+        const dopTexture = await App.instance.textureLoader.loadAsync(dopTexturePath)
+        dopTexture.colorSpace = THREE.SRGBColorSpace
+
+        const demTexture = await App.instance.textureLoader.loadAsync(demTexturePath)
+
+        const terrainTileParams = new TerrainTileParams(1, 512, dopTexture, demTexture)
 
         this.#terrainTile = new TerrainTile(terrainTileParams)
-        await this.#terrainTile.create()
 
         if (this.#terrainTile.mesh) {
             this.#camera.lookAt(this.#terrainTile.mesh.position)
@@ -144,8 +146,6 @@ export class App {
         const envMap = await this.#hdrLoader.loadAsync("/static/maps/envmap-1k.hdr")
         envMap.mapping = THREE.EquirectangularReflectionMapping
         this.#scene.environment = envMap
-        this.#scene.background = envMap
-        this.#scene.backgroundBlurriness = this.#tweaks.backgroundBlurriness
     }
 
     #setupTweaks() {
@@ -155,15 +155,6 @@ export class App {
             color: { type: "float" }
         }).on("change", (e) => {
             this.#renderer.setClearColor(e.value)
-        })
-
-        this.#tweaksFolder.addBinding(this.#tweaks, "backgroundBlurriness", {
-            label: "Background Blur",
-            min: 0,
-            max: 1.0,
-            step: 0.01
-        }).on("change", (e) => {
-            this.#scene.backgroundBlurriness = e.value
         })
 
         this.#tweaksFolder.addBinding(this.#tweaks, "toneMapping", {
@@ -191,7 +182,7 @@ export class App {
     #update() {
         const dt = this.#clock.getDelta()
         this.#orbitControls.update()
-        this.#terrainTile.update(dt)
+        this.#terrainTile?.update(dt)
     }
 
     #render() {

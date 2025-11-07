@@ -1,3 +1,5 @@
+import * as THREE from "three/build/three.webgpu"
+
 export class TerrainTileParams {
     /** @type {number} */
     size
@@ -5,22 +7,22 @@ export class TerrainTileParams {
     /** @type {number} */
     resolution
 
-    /** @type {string} */
-    dopPath
+    /** @type {THREE.Texture} */
+    dopTexture
 
-    /** @type {string} */
-    demPath
+    /** @type {THREE.Texture} */
+    demTexture
 
     /**
      * @param {number} size
      * @param {number} resolution
-     * @param {string} dopPath
-     * @param {string} demPath
+     * @param {THREE.Texture} dopTexture
+     * @param {THREE.Texture} demTexture
      */
-    constructor(size, resolution, dopPath, demPath) {
+    constructor(size, resolution, dopTexture, demTexture) {
         this.size = size
         this.resolution = resolution
-        this.dopPath = dopPath
-        this.demPath = demPath
+        this.dopTexture = dopTexture
+        this.demTexture = demTexture
     }
 }
