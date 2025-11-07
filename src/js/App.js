@@ -1,6 +1,8 @@
 import { HDRLoader, OrbitControls } from "three/examples/jsm/Addons.js"
 import * as THREE from "three/build/three.webgpu"
 import { Pane, FolderApi } from "tweakpane"
+import { Terrain } from "./Terrain.js"
+import { TerrainParams } from "./TerrainParams.js"
 
 export class App {
 
@@ -16,11 +18,9 @@ export class App {
     /** @type {THREE.Clock} */
     #clock
 
-    /** @type {THREE.Mesh?} */
-    #mesh = null
+    /** @type {Terrain} */
+    #terrain
 
-    /** @type {THREE.MeshStandardNodeMaterial?} */
-    #material = null
 
     /** @type {Pane} */
     #pane
@@ -54,9 +54,27 @@ export class App {
             "Filmic": THREE.ACESFilmicToneMapping,
             "Reinhard": THREE.ReinhardToneMapping,
         },
-        toneMapping: THREE.ACESFilmicToneMapping,
+        toneMapping: THREE.NoToneMapping,
         backgroundBlurriness: 0.75,
         displacementScale: 0.16,
+    }
+
+    /** @type {App} */
+    static #instance
+
+    static get instance() {
+        if (!this.#instance) {
+            this.#instance = new App()
+        }
+        return this.#instance
+    }
+
+    get pane() {
+        return this.#pane
+    }
+
+    get textureLoader() {
+        return this.#textureLoader
     }
 
     constructor() {
@@ -96,48 +114,44 @@ export class App {
     }
 
 
-    async initialize() {
+    async run() {
         await this.#renderer.init()
+        await this.#setupTerrain()
 
+        this.#setupHDREnvironment()
+        this.#setupTweaks()
+
+        window.addEventListener("resize", () => this.#onResize())
+
+        this.#render()
+    }
+
+    async #setupTerrain() {
         const texturePath = "/static/data/output_tiles-sargans/dop/level_1/tiles/tile_000_000.tif.png"
-        const texture = await this.#textureLoader.loadAsync(texturePath)
-        texture.colorSpace = THREE.SRGBColorSpace
-
         const heightMapPath = "/static/data/output_tiles-sargans/dem/level_1/tiles/tile_000_000.tif.png"
-        const heightMap = await this.#textureLoader.loadAsync(heightMapPath)
 
-        const size = 1
-        const resolution = 512
-        const geo = new THREE.PlaneGeometry(size, size, resolution, resolution)
-        this.#material = new THREE.MeshStandardNodeMaterial({
-            color: 0xffffff,
-            side: THREE.DoubleSide,
-            wireframe: this.#tweaks.wireframe,
-            map: texture,
-            displacementMap: heightMap,
-            displacementScale: this.#tweaks.displacementScale,
-        })
+        const terrainParams = new TerrainParams(1, 512, texturePath, heightMapPath)
 
-        this.#mesh = new THREE.Mesh(geo, this.#material)
-        this.#mesh.geometry.rotateX(-Math.PI * 0.5)
-        this.#camera.lookAt(this.#mesh.position)
-        this.#scene.add(this.#mesh)
+        this.#terrain = new Terrain(terrainParams)
+        await this.#terrain.create()
 
+        if (this.#terrain.mesh) {
+            this.#camera.lookAt(this.#terrain.mesh.position)
+            this.#scene.add(this.#terrain.mesh)
+        }
+
+    }
+
+    async #setupHDREnvironment() {
         const envMap = await this.#hdrLoader.loadAsync("/static/maps/envmap-1k.hdr")
         envMap.mapping = THREE.EquirectangularReflectionMapping
         this.#scene.environment = envMap
         this.#scene.background = envMap
         this.#scene.backgroundBlurriness = this.#tweaks.backgroundBlurriness
 
-
-        this.setupTweaks()
-
-        window.addEventListener("resize", () => this.#Resize())
-
-        this.#Render()
     }
 
-    setupTweaks() {
+    #setupTweaks() {
         this.#tweaksFolder.addBinding(this.#tweaks, "background", {
             label: "Background Color",
             view: "color",
@@ -155,17 +169,6 @@ export class App {
             this.#scene.backgroundBlurriness = e.value
         })
 
-        this.#tweaksFolder.addBinding(this.#tweaks, "displacementScale", {
-            label: "Displacement Scale",
-            min: 0,
-            max: 5.0,
-            step: 0.01
-        }).on("change", (e) => {
-            if (this.#material) {
-                this.#material.displacementScale = e.value
-            }
-        })
-
         this.#tweaksFolder.addBinding(this.#tweaks, "toneMapping", {
             label: "Tone Mapping",
             options: this.#tweaks.toneMappingOptions
@@ -173,20 +176,9 @@ export class App {
             this.#renderer.toneMapping = e.value
         })
 
-        this.#tweaksFolder.addBinding(this.#tweaks, "wireframe", {
-            label: "Wireframe",
-        }).on("change", (e) => {
-            if (this.#material) {
-                this.#material.wireframe = e.value
-            }
-        })
-
-        this.#tweaksFolder.addBinding(this.#tweaks, "animate", {
-            label: "Animate",
-        })
     }
 
-    #Resize() {
+    #onResize() {
         this.#sizes.width = window.innerWidth
         this.#sizes.height = window.innerHeight
 
@@ -199,22 +191,15 @@ export class App {
         this.#camera.updateProjectionMatrix()
     }
 
-    #Update() {
+    #update() {
         const dt = this.#clock.getDelta()
-        const speed = 0.25
         this.#orbitControls.update()
-
-        if (this.#tweaks.animate) {
-            this.#elapsedTime += dt
-            if (this.#mesh) {
-                this.#mesh.rotateY(Math.PI * dt * speed)
-            }
-        }
+        this.#terrain.update(dt)
     }
 
-    #Render() {
-        this.#Update()
+    #render() {
+        this.#update()
         this.#renderer.render(this.#scene, this.#camera)
-        window.requestAnimationFrame(() => this.#Render())
+        window.requestAnimationFrame(() => this.#render())
     }
 }

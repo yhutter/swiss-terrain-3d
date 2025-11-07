@@ -12,6 +12,6 @@
     "strict": true,
     "strictNullChecks": true
   },
-  "include": ["code/**/*.js"],
+  "include": ["js/**/*.js"],
   "exclude": ["node_modules"]
 }
