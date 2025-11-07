@@ -1,8 +1,8 @@
 import { HDRLoader, OrbitControls } from "three/examples/jsm/Addons.js"
 import * as THREE from "three/build/three.webgpu"
 import { Pane, FolderApi } from "tweakpane"
-import { Terrain } from "./Terrain.js"
-import { TerrainParams } from "./TerrainParams.js"
+import { TerrainTile } from "./TerrainTile.js"
+import { TerrainTileParams } from "./TerrainTileParams.js"
 
 export class App {
 
@@ -18,8 +18,8 @@ export class App {
     /** @type {THREE.Clock} */
     #clock
 
-    /** @type {Terrain} */
-    #terrain
+    /** @type {TerrainTile} */
+    #terrainTile
 
 
     /** @type {Pane} */
@@ -36,8 +36,6 @@ export class App {
 
     /** @type {OrbitControls} */
     #orbitControls
-
-    #elapsedTime = 0
 
     #sizes = {
         width: 0,
@@ -116,7 +114,7 @@ export class App {
 
     async run() {
         await this.#renderer.init()
-        await this.#setupTerrain()
+        await this.#setupTerrainTile()
 
         this.#setupHDREnvironment()
         this.#setupTweaks()
@@ -126,18 +124,18 @@ export class App {
         this.#render()
     }
 
-    async #setupTerrain() {
+    async #setupTerrainTile() {
         const texturePath = "/static/data/output_tiles-sargans/dop/level_1/tiles/tile_000_000.tif.png"
         const heightMapPath = "/static/data/output_tiles-sargans/dem/level_1/tiles/tile_000_000.tif.png"
 
-        const terrainParams = new TerrainParams(1, 512, texturePath, heightMapPath)
+        const terrainTileParams = new TerrainTileParams(1, 512, texturePath, heightMapPath)
 
-        this.#terrain = new Terrain(terrainParams)
-        await this.#terrain.create()
+        this.#terrainTile = new TerrainTile(terrainTileParams)
+        await this.#terrainTile.create()
 
-        if (this.#terrain.mesh) {
-            this.#camera.lookAt(this.#terrain.mesh.position)
-            this.#scene.add(this.#terrain.mesh)
+        if (this.#terrainTile.mesh) {
+            this.#camera.lookAt(this.#terrainTile.mesh.position)
+            this.#scene.add(this.#terrainTile.mesh)
         }
 
     }
@@ -148,7 +146,6 @@ export class App {
         this.#scene.environment = envMap
         this.#scene.background = envMap
         this.#scene.backgroundBlurriness = this.#tweaks.backgroundBlurriness
-
     }
 
     #setupTweaks() {
@@ -194,7 +191,7 @@ export class App {
     #update() {
         const dt = this.#clock.getDelta()
         this.#orbitControls.update()
-        this.#terrain.update(dt)
+        this.#terrainTile.update(dt)
     }
 
     #render() {

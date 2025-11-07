@@ -1,4 +1,4 @@
-export class TerrainParams {
+export class TerrainTileParams {
     /** @type {number} */
     size
 

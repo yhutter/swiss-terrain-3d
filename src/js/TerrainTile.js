@@ -1,15 +1,15 @@
 import * as THREE from "three/build/three.webgpu"
-import { TerrainParams } from './TerrainParams';
+import { TerrainTileParams } from './TerrainTileParams';
 import { App } from './App.js';
 
-export class Terrain {
+export class TerrainTile {
     /** @type {THREE.Mesh?} */
     #mesh = null
 
     /** @type {THREE.MeshStandardNodeMaterial?} */
     #material = null
 
-    /** @type {TerrainParams} */
+    /** @type {TerrainTileParams} */
     #params
 
     #tweaks = {
@@ -23,7 +23,7 @@ export class Terrain {
     }
 
     /** 
-     * @param {TerrainParams} params 
+     * @param {TerrainTileParams} params 
      */
     constructor(params) {
         this.#params = params
