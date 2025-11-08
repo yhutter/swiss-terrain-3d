@@ -13,16 +13,27 @@ export class TerrainTileParams {
     /** @type {THREE.Texture} */
     demTexture
 
+    /** @type {boolean} */
+    wireframe = false
+
     /**
      * @param {number} size
      * @param {number} resolution
      * @param {THREE.Texture} dopTexture
      * @param {THREE.Texture} demTexture
+     * @param {boolean} wireframe
      */
-    constructor(size, resolution, dopTexture, demTexture) {
+    constructor(
+        size,
+        resolution,
+        dopTexture,
+        demTexture,
+        wireframe = false,
+    ) {
         this.size = size
         this.resolution = resolution
         this.dopTexture = dopTexture
         this.demTexture = demTexture
+        this.wireframe = wireframe
     }
 }

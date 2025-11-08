@@ -1,8 +1,7 @@
 import { HDRLoader, OrbitControls } from "three/examples/jsm/Addons.js"
 import * as THREE from "three/build/three.webgpu"
 import { Pane, FolderApi } from "tweakpane"
-import { TerrainTile } from "./TerrainTile.js"
-import { TerrainTileParams } from "./TerrainTileParams.js"
+import { Terrain } from "./Terrain.js"
 
 export class App {
 
@@ -18,8 +17,8 @@ export class App {
     /** @type {THREE.Clock} */
     #clock
 
-    /** @type {TerrainTile?} */
-    #terrainTile = null
+    /** @type {Terrain?} */
+    #terrain = null
 
 
     /** @type {Pane} */
@@ -43,7 +42,6 @@ export class App {
     }
 
     #tweaks = {
-        wireframe: false,
         background: new THREE.Color(0x000000),
         toneMappingOptions: {
             "None": THREE.NoToneMapping,
@@ -70,6 +68,10 @@ export class App {
 
     get textureLoader() {
         return this.#textureLoader
+    }
+
+    get scene() {
+        return this.#scene
     }
 
     constructor() {
@@ -111,7 +113,7 @@ export class App {
 
     async run() {
         await this.#renderer.init()
-        await this.#setupTerrainTile()
+        await this.#setupTerrain()
 
         this.#setupHDREnvironment()
         this.#setupTweaks()
@@ -121,25 +123,10 @@ export class App {
         this.#render()
     }
 
-    async #setupTerrainTile() {
-        App.instance.textureLoader.setPath("/static/data/output_tiles-sargans/")
-        const dopTexturePath = "dop/level_1/tiles/tile_000_000.tif.png"
-        const demTexturePath = "dem/level_1/tiles/tile_000_000.tif.png"
+    async #setupTerrain() {
 
-        const dopTexture = await App.instance.textureLoader.loadAsync(dopTexturePath)
-        dopTexture.colorSpace = THREE.SRGBColorSpace
-
-        const demTexture = await App.instance.textureLoader.loadAsync(demTexturePath)
-
-        const terrainTileParams = new TerrainTileParams(1, 512, dopTexture, demTexture)
-
-        this.#terrainTile = new TerrainTile(terrainTileParams)
-
-        if (this.#terrainTile.mesh) {
-            this.#camera.lookAt(this.#terrainTile.mesh.position)
-            this.#scene.add(this.#terrainTile.mesh)
-        }
-
+        this.#terrain = new Terrain()
+        await this.#terrain.loadTerrainTiles()
     }
 
     async #setupHDREnvironment() {
@@ -182,7 +169,7 @@ export class App {
     #update() {
         const dt = this.#clock.getDelta()
         this.#orbitControls.update()
-        this.#terrainTile?.update(dt)
+        this.#terrain?.update(dt)
     }
 
     #render() {
