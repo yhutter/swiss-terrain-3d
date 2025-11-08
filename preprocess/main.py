@@ -286,7 +286,7 @@ def crop_to_divisible_square_grid(
         outputBounds=(minx, miny_crop, maxx_crop, maxy),
         dstSRS=SRS,
         cropToCutline=False,
-        resampleAlg="bilinear",
+        resampleAlg=RESAMPLING,
         format="VRT",
         dstAlpha=False,
     )
@@ -337,18 +337,15 @@ def tile_vrt_lod(level_vrt: str, out_dir: str, chunk_px: int):
 
     for ty in range(tiles_y):
         for tx in range(tiles_x):
-            xmin = minx + tx * chunk_px * px
-            xmax = xmin + chunk_px * px
-            ymax = maxy - ty * chunk_px * py
-            ymin = ymax - chunk_px * py
+            xoff = tx * chunk_px
+            yoff = ty * chunk_px
 
             out_tif = Path(out_dir) / f"tile_{ty:03d}_{tx:03d}.tif"
             gdal.Translate(
                 str(out_tif),
                 ds,
-                projWin=[xmin, ymax, xmax, ymin],
-                width=chunk_px,
-                height=chunk_px,
+                srcWin=[xoff, yoff, chunk_px, chunk_px],
+                resampleAlg=RESAMPLING,
                 format="GTiff",
                 creationOptions=["TILED=YES", "COMPRESS=DEFLATE"],
             )
@@ -373,7 +370,7 @@ def generate_empty_image(width, height, color, output_file):
     print(f"[INFO] Created empty height map: {output_file}")
 
 
-def generate_height_map_from_tif(input_file, output_file, scale, size):
+def generate_height_map_from_tif(input_file, output_file, in_scale, out_scale, size):
     """
     Generates a height map from the input GeoTIFF file, scaling elevation values to the specified range.
     """
@@ -392,12 +389,10 @@ def generate_height_map_from_tif(input_file, output_file, scale, size):
         generate_empty_image(size, size, 0, output_file)
         return
 
-    min_val, max_val, mean_val, _ = stats
-
     translate_options = gdal.TranslateOptions(
         format="PNG",
         outputType=gdal.GDT_UInt16,
-        scaleParams=[[min_val, max_val, scale[0], scale[1]]],
+        scaleParams=[[in_scale[0], in_scale[1], out_scale[0], out_scale[1]]],
     )
 
     gdal.Translate(destName=output_file, srcDS=input_file, options=translate_options)
@@ -497,6 +492,16 @@ def collect_metadata(dem_root: Path, dop_root: Path, levels: int):
     return metadata
 
 
+def compute_global_minmax(vrt_path):
+    ds = gdal.Open(vrt_path)
+    band = ds.GetRasterBand(1)
+    stats = band.GetStatistics(True, True)
+    ds = None
+    global_min = stats[0]
+    global_max = stats[1]
+    return global_min, global_max
+
+
 def process_all(dem_input: str, dop_input: str, out_dir: str, chunk_px: int):
     """
     Main processing function to build and tile DEM and Image LOD pyramids.
@@ -553,10 +558,17 @@ def process_all(dem_input: str, dop_input: str, out_dir: str, chunk_px: int):
     print("\nGenerating DEM images...")
     for L in range(levels):
         dem_tiles = list((dem_root / f"level_{L}" / "tiles").glob("*.tif"))
+        level_vrt = str(dem_root / f"level_{L}" / f"mosaic_L{L}.vrt")
+        global_min, global_max = compute_global_minmax(level_vrt)
+
         for dem_tile in dem_tiles:
             height_map_path = dem_tile.parent / f"{dem_tile.name}.png"
             generate_height_map_from_tif(
-                str(dem_tile), str(height_map_path), scale=(0, 65535), size=chunk_px
+                str(dem_tile),
+                str(height_map_path),
+                in_scale=(global_min, global_max),
+                out_scale=(0, 65535),
+                size=chunk_px,
             )
 
     print("\nGenerating DOP images...")
@@ -597,7 +609,7 @@ if __name__ == "__main__":
         print(json.dumps(config, indent=2))
 
     MAX_LEVELS = None  # If set to None, the level will be determined automatically so that the highest level is 1x1 tile.
-    RESAMPLING = "average"
+    RESAMPLING = "bilinear"
 
     MOS_DEM_VRT = "mosaic_dem.vrt"
     MOS_DOP_VRT = "mosaic_dop.vrt"
