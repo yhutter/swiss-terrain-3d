@@ -3,6 +3,11 @@ import * as THREE from "three/build/three.webgpu"
 import { Pane, FolderApi } from "tweakpane"
 import { Terrain } from "./Terrain.js"
 
+const TERRAIN_METADATA_PATH = "/static/data/output_tiles-sargans/terrain_metadata.json"
+const ENV_MAP_PATH = "/static/maps/envmap-1k.hdr"
+
+const RENDER_SCALE = 0.001
+
 export class App {
 
     /** @type{THREE.WebGPURenderer} */
@@ -124,13 +129,12 @@ export class App {
     }
 
     async #setupTerrain() {
-
-        this.#terrain = new Terrain()
-        await this.#terrain.loadTerrainTiles()
+        this.#terrain = new Terrain(RENDER_SCALE)
+        await this.#terrain.loadTerrain(TERRAIN_METADATA_PATH)
     }
 
     async #setupHDREnvironment() {
-        const envMap = await this.#hdrLoader.loadAsync("/static/maps/envmap-1k.hdr")
+        const envMap = await this.#hdrLoader.loadAsync(ENV_MAP_PATH)
         envMap.mapping = THREE.EquirectangularReflectionMapping
         this.#scene.environment = envMap
     }

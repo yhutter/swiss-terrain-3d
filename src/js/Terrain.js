@@ -2,6 +2,9 @@ import * as THREE from "three/build/three.webgpu"
 import { TerrainTileParams } from './TerrainTileParams';
 import { App } from './App.js';
 import { TerrainTile } from "./TerrainTile.js";
+import { TerrainMetadata } from "./TerrainMetadata.js";
+import { TerrainLevelMetadata } from "./TerrainLevelMetadata.js";
+import { mx_hash_int_4 } from "three/src/nodes/materialx/lib/mx_noise.js";
 
 export class Terrain extends THREE.Group {
     #tweaks = {
@@ -11,6 +14,9 @@ export class Terrain extends THREE.Group {
 
     /** @type {TerrainTile[]} */
     #terrainTiles = []
+
+    /** @type {number} */
+    #renderScale = 1.0
 
     #setupTweaks() {
         const folder = App.instance.pane.addFolder({
@@ -34,66 +40,71 @@ export class Terrain extends THREE.Group {
         })
     }
 
-    constructor() {
+    /** 
+     * Creates a Terrain instance with the provided render scale.
+     * @param {number} renderScale
+     */
+    constructor(renderScale) {
         super()
+        this.#renderScale = renderScale
         this.#setupTweaks()
     }
 
     /** 
-     * @param {string} dopTexturePath 
-     * @param {string} demTexturePath 
-     * @param {number} size 
+     * @param {TerrainLevelMetadata} tileInfo
      * @param {number} resolution 
      * @param {boolean} wireframe 
-     * @param {number} displacementScale
      * @returns {Promise<TerrainTile>}
      */
-    async createTerrainTile(
-        dopTexturePath,
-        demTexturePath,
-        size = 1,
+    async #createTerrainTile(
+        tileInfo,
         resolution = 512,
         wireframe = false,
     ) {
-        const dopTexture = await App.instance.textureLoader.loadAsync(dopTexturePath)
+        const dopTexture = await App.instance.textureLoader.loadAsync(tileInfo.dopImagePath)
         dopTexture.colorSpace = THREE.SRGBColorSpace
 
-        const demTexture = await App.instance.textureLoader.loadAsync(demTexturePath)
+        const demTexture = await App.instance.textureLoader.loadAsync(tileInfo.demImagePath)
+
+        const size = tileInfo.normalizeBoundingBox.getSize(new THREE.Vector2())
 
         const terrainTileParams = new TerrainTileParams(
-            size,
+            size.x * this.#renderScale,
             resolution,
             dopTexture,
             demTexture,
             wireframe,
         )
         const terrainTile = new TerrainTile(terrainTileParams)
+
+        // Position the tile based on the normalized bounding box
+        const center = tileInfo.normalizeBoundingBox.getCenter(new THREE.Vector2())
+        terrainTile.mesh?.position.set(
+            center.x * this.#renderScale,
+            0,
+            // The minus here is important to flip the Y axis to match Three.js coordinate system
+            -center.y * this.#renderScale,
+        )
         return terrainTile
     }
 
-    async loadTerrainTiles() {
-        App.instance.textureLoader.setPath("/static/data/output_tiles-sargans/")
+    /** 
+     * Load terrain from metadata.
+     * @param {string} metadataPath 
+     */
+    async loadTerrain(metadataPath) {
+        const metadata = await TerrainMetadata.loadFromJson(metadataPath)
 
-        const terrainTile1 = await this.createTerrainTile(
-            "dop/level_0/tiles/tile_000_000.tif.png",
-            "dem/level_0/tiles/tile_000_000.tif.png",
-            1,
-            512,
-            this.#tweaks.wireframe,
-        )
-
-        const terrainTile2 = await this.createTerrainTile(
-            "dop/level_0/tiles/tile_000_001.tif.png",
-            "dem/level_0/tiles/tile_000_001.tif.png",
-            1,
-            512,
-            this.#tweaks.wireframe,
-        )
-
-        terrainTile2.mesh?.position.set(1.0, 0, 0)
-
-        this.#terrainTiles.push(terrainTile1)
-        this.#terrainTiles.push(terrainTile2)
+        // Load all tiles of same level
+        const exampleTiles = metadata.levels.filter(level => level.level === 0)
+        for (const tileInfo of exampleTiles) {
+            const terrainTile = await this.#createTerrainTile(
+                tileInfo,
+                128,
+                this.#tweaks.wireframe,
+            )
+            this.#terrainTiles.push(terrainTile)
+        }
 
         for (const tile of this.#terrainTiles) {
             if (tile.mesh) {
