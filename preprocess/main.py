@@ -457,7 +457,7 @@ def get_tile_metadata(tile_path: Path):
     }
 
 
-def collect_level_metadata(dem_root: Path, dop_root: Path, levels: int):
+def collect_level_metadata(dem_root: Path, dop_root: Path, levels: int, center_origin):
     metadata = []
     for L in range(levels):
         dem_tiles = list((dem_root / f"level_{L}" / "tiles").glob("*.tif"))
@@ -467,6 +467,14 @@ def collect_level_metadata(dem_root: Path, dop_root: Path, levels: int):
             dem_image_path = Path(f"{dem_tile}.png")
             dop_tile = dop_root / f"level_{L}" / "tiles" / f"tile_{ty:03d}_{tx:03d}.tif"
             dop_image_path = Path(f"{dop_tile}.png")
+
+            bbox = info["bbox"]
+            normalized_bbox = [
+                bbox[0] - center_origin[0],
+                bbox[1] - center_origin[1],
+                bbox[2] - center_origin[0],
+                bbox[3] - center_origin[1],
+            ]
 
             entry = {
                 "id": f"L{L}_{ty:03d}_{tx:03d}",
@@ -482,7 +490,8 @@ def collect_level_metadata(dem_root: Path, dop_root: Path, levels: int):
                 "dop_image_path": str(dop_image_path)
                 if dop_image_path.exists()
                 else None,
-                "bbox": info["bbox"],
+                "bbox": bbox,
+                "normalized_bbox": normalized_bbox,
                 "size": info["size"],
                 "min_elev": info["min"],
                 "max_elev": info["max"],
@@ -546,11 +555,7 @@ def preprocess(dem_input: str, dop_input: str, out_dir: str, chunk_px: int):
         dop_vrt, str(Path(out_dir) / MOS_DOP_CROP), chunk_px, levels
     )
 
-    dem_origin = get_center_origin_from_vrt(dem_crop)
-    dop_origin = get_center_origin_from_vrt(dop_crop)
-
-    print(f"DEM origin (minx, maxy): {dem_origin}")
-    print(f"DOP origin (minx, maxy): {dop_origin}")
+    center_origin = get_center_origin_from_vrt(dem_crop)
 
     # DEM LOD pyramid
     dem_root = Path(out_dir) / "dem"
@@ -600,10 +605,9 @@ def preprocess(dem_input: str, dop_input: str, out_dir: str, chunk_px: int):
 
     # Metadata
     print("\nWrite tile metadata...")
-    level_metadata = collect_level_metadata(dem_root, dop_root, levels)
+    level_metadata = collect_level_metadata(dem_root, dop_root, levels, center_origin)
     metadata = {
-        "dem_origin": dem_origin,
-        "dop_origin": dop_origin,
+        "center_origin": center_origin,
         "levels": level_metadata,
     }
     meta_path = Path(out_dir) / "terrain_metadata.json"

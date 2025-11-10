@@ -45,6 +45,7 @@ export class Terrain extends THREE.Group {
      * @param {number} size 
      * @param {number} resolution 
      * @param {boolean} wireframe 
+     * @param {number} displacementScale
      * @returns {Promise<TerrainTile>}
      */
     async createTerrainTile(
@@ -78,6 +79,7 @@ export class Terrain extends THREE.Group {
             "dem/level_0/tiles/tile_000_000.tif.png",
             1,
             512,
+            this.#tweaks.wireframe,
         )
 
         const terrainTile2 = await this.createTerrainTile(
@@ -85,6 +87,7 @@ export class Terrain extends THREE.Group {
             "dem/level_0/tiles/tile_000_001.tif.png",
             1,
             512,
+            this.#tweaks.wireframe,
         )
 
         terrainTile2.mesh?.position.set(1.0, 0, 0)
