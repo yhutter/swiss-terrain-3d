@@ -457,7 +457,7 @@ def get_tile_metadata(tile_path: Path):
     }
 
 
-def collect_metadata(dem_root: Path, dop_root: Path, levels: int):
+def collect_level_metadata(dem_root: Path, dop_root: Path, levels: int):
     metadata = []
     for L in range(levels):
         dem_tiles = list((dem_root / f"level_{L}" / "tiles").glob("*.tif"))
@@ -502,7 +502,21 @@ def compute_global_minmax(vrt_path):
     return global_min, global_max
 
 
-def process_all(dem_input: str, dop_input: str, out_dir: str, chunk_px: int):
+def get_center_origin_from_vrt(vrt_path):
+    """Gets the bounding box center from the VRT file."""
+    ds = gdal.Open(vrt_path)
+    gt = ds.GetGeoTransform()
+    minx = gt[0]
+    maxx = gt[0] + ds.RasterXSize * gt[1]
+    miny = gt[3] + ds.RasterYSize * gt[5]
+    maxy = gt[3]
+    ds = None
+    center_x = (minx + maxx) / 2
+    center_y = (miny + maxy) / 2
+    return (center_x, center_y)
+
+
+def preprocess(dem_input: str, dop_input: str, out_dir: str, chunk_px: int):
     """
     Main processing function to build and tile DEM and Image LOD pyramids.
     """
@@ -531,6 +545,12 @@ def process_all(dem_input: str, dop_input: str, out_dir: str, chunk_px: int):
     dop_crop, _ = crop_to_divisible_square_grid(
         dop_vrt, str(Path(out_dir) / MOS_DOP_CROP), chunk_px, levels
     )
+
+    dem_origin = get_center_origin_from_vrt(dem_crop)
+    dop_origin = get_center_origin_from_vrt(dop_crop)
+
+    print(f"DEM origin (minx, maxy): {dem_origin}")
+    print(f"DOP origin (minx, maxy): {dop_origin}")
 
     # DEM LOD pyramid
     dem_root = Path(out_dir) / "dem"
@@ -580,7 +600,12 @@ def process_all(dem_input: str, dop_input: str, out_dir: str, chunk_px: int):
 
     # Metadata
     print("\nWrite tile metadata...")
-    metadata = collect_metadata(dem_root, dop_root, levels)
+    level_metadata = collect_level_metadata(dem_root, dop_root, levels)
+    metadata = {
+        "dem_origin": dem_origin,
+        "dop_origin": dop_origin,
+        "levels": level_metadata,
+    }
     meta_path = Path(out_dir) / "terrain_metadata.json"
     with open(meta_path, "w") as f:
         json.dump(metadata, f, indent=2)
@@ -599,6 +624,7 @@ if __name__ == "__main__":
     with open(config_file_path, "r") as f:
         config = json.load(f)
         use_patching = config.get("use_patching", True)
+        skip_download = config.get("skip_download", False)
         dem_csv_path = config.get("dem_csv_path", None)
         dop_csv_path = config.get("dop_csv_path", None)
         dem_download_dir = config.get("dem_download_dir", None)
@@ -616,27 +642,28 @@ if __name__ == "__main__":
     MOS_DEM_CROP = "mosaic_dem_cropped.vrt"
     MOS_DOP_CROP = "mosaic_dop_cropped.vrt"
 
-    if use_patching:
-        dem_csv_patched_path = f"{dem_csv_path}.patched"
-        print("Patching SwissALTI3D CSV for missing tiles...")
-        patch_swisstopo_csv(dem_csv_path, dem_csv_patched_path, type="dem")
+    if not skip_download:
+        if use_patching:
+            dem_csv_patched_path = f"{dem_csv_path}.patched"
+            print("Patching SwissALTI3D CSV for missing tiles...")
+            patch_swisstopo_csv(dem_csv_path, dem_csv_patched_path, type="dem")
 
-    print("Downloading SwissALTI3D tiles...")
-    if use_patching:
-        download_tiles_from_csv(dem_csv_patched_path, dem_download_dir)
-    else:
-        download_tiles_from_csv(dem_csv_path, dem_download_dir)
+        print("Downloading SwissALTI3D tiles...")
+        if use_patching:
+            download_tiles_from_csv(dem_csv_patched_path, dem_download_dir)
+        else:
+            download_tiles_from_csv(dem_csv_path, dem_download_dir)
 
-    if use_patching:
-        dop_csv_patched_path = f"{dop_csv_path}.patched"
-        print("Patching SwissIMAGE CSV for missing tiles...")
-        patch_swisstopo_csv(dop_csv_path, dop_csv_patched_path, type="dop")
+        if use_patching:
+            dop_csv_patched_path = f"{dop_csv_path}.patched"
+            print("Patching SwissIMAGE CSV for missing tiles...")
+            patch_swisstopo_csv(dop_csv_path, dop_csv_patched_path, type="dop")
 
-    print("Downloading SwissIMAGE tiles...")
-    if use_patching:
-        download_tiles_from_csv(dop_csv_patched_path, dop_download_dir)
-    else:
-        download_tiles_from_csv(dop_csv_path, dop_download_dir)
+        print("Downloading SwissIMAGE tiles...")
+        if use_patching:
+            download_tiles_from_csv(dop_csv_patched_path, dop_download_dir)
+        else:
+            download_tiles_from_csv(dop_csv_path, dop_download_dir)
 
     print("Starting preprocessing pipeline...")
-    process_all(dem_download_dir, dop_download_dir, output_dir, tile_size_px)
+    preprocess(dem_download_dir, dop_download_dir, output_dir, tile_size_px)
