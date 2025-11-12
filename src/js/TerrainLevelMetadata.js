@@ -1,23 +1,6 @@
 import * as THREE from "three/build/three.webgpu"
 
 export class TerrainLevelMetadata {
-    // "bbox": [
-    //   2750000.0,
-    //   1213000.0,
-    //   2751000.0,
-    //   1214000.0
-    // ],
-    // "normalized_bbox": [
-    //   -2000.0,
-    //   -1000.0,
-    //   -1000.0,
-    //   0.0
-    // ],
-    // "size": [
-    //   500,
-    //   500
-    // ],
-
     /** @type {number} */
     level = 0
 
@@ -38,6 +21,12 @@ export class TerrainLevelMetadata {
 
     /** @type {number} */
     meanElevation = 0.0
+
+    /** @type {number} */
+    tileX = 0
+
+    /** @type {number} */
+    tileY = 0
 
     /** 
      * Cleans up the image path to be relative to the /static/ folder.
@@ -72,6 +61,8 @@ export class TerrainLevelMetadata {
         this.minElevation = data["min_elevation"] || 0.0
         this.maxElevation = data["max_elevation"] || 0.0
         this.meanElevation = data["mean_elevation"] || 0.0
+        this.tileX = data["tile_x"] || 0
+        this.tileY = data["tile_y"] || 0
     }
 
 

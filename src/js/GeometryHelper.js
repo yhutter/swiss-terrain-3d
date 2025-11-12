@@ -34,7 +34,7 @@ export class GeometryHelper {
                 positions.push(posX, posY, posZ)
 
                 const uvX = x / resolution;
-                const uvY = (y / resolution);
+                const uvY = y / resolution;
                 uvs.push(uvX, uvY);
             }
         }

@@ -4,7 +4,6 @@ import { App } from './App.js';
 import { TerrainTile } from "./TerrainTile.js";
 import { TerrainMetadata } from "./TerrainMetadata.js";
 import { TerrainLevelMetadata } from "./TerrainLevelMetadata.js";
-import { mx_hash_int_4 } from "three/src/nodes/materialx/lib/mx_noise.js";
 
 export class Terrain extends THREE.Group {
     #tweaks = {
@@ -52,24 +51,34 @@ export class Terrain extends THREE.Group {
 
     /** 
      * @param {TerrainLevelMetadata} tileInfo
-     * @param {number} resolution 
+     * @param {number} maxTile
+     * @param {number} resolution
      * @param {boolean} wireframe 
      * @returns {Promise<TerrainTile>}
      */
     async #createTerrainTile(
         tileInfo,
+        maxTile,
         resolution = 512,
         wireframe = false,
     ) {
         const dopTexture = await App.instance.textureLoader.loadAsync(tileInfo.dopImagePath)
         dopTexture.colorSpace = THREE.SRGBColorSpace
+        dopTexture.wrapS = THREE.ClampToEdgeWrapping
+        dopTexture.wrapT = THREE.ClampToEdgeWrapping
 
         const demTexture = await App.instance.textureLoader.loadAsync(tileInfo.demImagePath)
+        demTexture.wrapS = THREE.ClampToEdgeWrapping
+        demTexture.wrapT = THREE.ClampToEdgeWrapping
+        demTexture.generateMipmaps = false
+        demTexture.minFilter = THREE.LinearFilter
+        demTexture.magFilter = THREE.LinearFilter
 
-        const size = tileInfo.normalizeBoundingBox.getSize(new THREE.Vector2())
+        const boundingBoxSize = tileInfo.normalizeBoundingBox.getSize(new THREE.Vector2())
+        const size = boundingBoxSize.x * this.#renderScale
 
         const terrainTileParams = new TerrainTileParams(
-            size.x * this.#renderScale,
+            size,
             resolution,
             dopTexture,
             demTexture,
@@ -77,13 +86,14 @@ export class Terrain extends THREE.Group {
         )
         const terrainTile = new TerrainTile(terrainTileParams)
 
-        // Position the tile based on the normalized bounding box
-        const center = tileInfo.normalizeBoundingBox.getCenter(new THREE.Vector2())
+        const tileSize = boundingBoxSize.x * this.#renderScale;
+        const posX = (tileInfo.tileX - 0.5 * maxTile) * tileSize;
+        const posZ = (tileInfo.tileY - 0.5 * maxTile) * tileSize;
+
         terrainTile.mesh?.position.set(
-            center.x * this.#renderScale,
+            posX,
             0,
-            // The minus here is important to flip the Y axis to match Three.js coordinate system
-            -center.y * this.#renderScale,
+            posZ,
         )
         return terrainTile
     }
@@ -97,10 +107,18 @@ export class Terrain extends THREE.Group {
 
         // Load all tiles of same level
         const exampleTiles = metadata.levels.filter(level => level.level === 0)
+        const defaultResolution = 128
+
+        // Because the tiles are always square we can take either x or y
+        const maxTile = Math.max(...exampleTiles.map(t => t.tileX))
+
         for (const tileInfo of exampleTiles) {
+            const includeEdge = tileInfo.tileX === maxTile
+            const resolution = (defaultResolution - 1) - (includeEdge ? 0 : 1)
             const terrainTile = await this.#createTerrainTile(
                 tileInfo,
-                128,
+                maxTile,
+                resolution,
                 this.#tweaks.wireframe,
             )
             this.#terrainTiles.push(terrainTile)
