@@ -331,20 +331,25 @@ def tile_vrt_lod(level_vrt: str, out_dir: str, chunk_px: int):
     """
     ds = gdal.Open(level_vrt)
     (minx, miny, maxx, maxy), (W, H), (px, py) = get_raster_info(ds)
-    tiles_x = W // chunk_px
-    tiles_y = H // chunk_px
+
+    stride = chunk_px - 1  # 1px overlap to avoid seams
+    tiles_x = 1 + max(0, (W - chunk_px) // stride)
+    tiles_y = 1 + max(0, (H - chunk_px) // stride)
+
     Path(out_dir).mkdir(parents=True, exist_ok=True)
 
     for ty in range(tiles_y):
         for tx in range(tiles_x):
-            xoff = tx * chunk_px
-            yoff = ty * chunk_px
+            xoff = tx * stride
+            yoff = ty * stride
+            win_w = min(chunk_px, W - xoff)
+            win_h = min(chunk_px, H - yoff)
 
             out_tif = Path(out_dir) / f"tile_{ty:03d}_{tx:03d}.tif"
             gdal.Translate(
                 str(out_tif),
                 ds,
-                srcWin=[xoff, yoff, chunk_px, chunk_px],
+                srcWin=[xoff, yoff, win_w, win_h],
                 resampleAlg=RESAMPLING,
                 format="GTiff",
                 creationOptions=["TILED=YES", "COMPRESS=DEFLATE"],
