@@ -1,0 +1,57 @@
+import * as THREE from "three"
+import { TerrainLevelMetadata } from "./TerrainLevelMetadata"
+import { TerrainMetadata } from "./TerrainMetadata"
+
+export class TerrainMetadataParser {
+    private static cleanUpImagePath(path: string): string {
+        const staticIndex = path.indexOf("static")
+        if (staticIndex !== -1) {
+            return "/" + path.substring(staticIndex)
+        }
+        return path
+    }
+
+    private static parseTerrainLevelMetadata(data: any): TerrainLevelMetadata {
+        return {
+            level: data["level"] || 0,
+            demImagePath: TerrainMetadataParser.cleanUpImagePath(data["dem_image_path"] || ""),
+            dopImagePath: TerrainMetadataParser.cleanUpImagePath(data["dop_image_path"] || ""),
+            normalizeBoundingBox: new THREE.Box2(
+                new THREE.Vector2(
+                    data["normalized_bbox"]?.[0] || 0,
+                    data["normalized_bbox"]?.[1] || 0
+                ),
+                new THREE.Vector2(
+                    data["normalized_bbox"]?.[2] || 0,
+                    data["normalized_bbox"]?.[3] || 0
+                )
+            ),
+            minElevation: data["min_elevation"] || 0.0,
+            maxElevation: data["max_elevation"] || 0.0,
+            meanElevation: data["mean_elevation"] || 0.0,
+            tileX: data["tile_x"] || 0,
+            tileY: data["tile_y"] || 0,
+        }
+    }
+
+
+    static async parseFromJson(jsonPath: string): Promise<TerrainMetadata> {
+        const response = await fetch(jsonPath)
+        if (!response.ok) {
+            throw new Error(`Failed to load terrain metadata from ${jsonPath}: ${response.status} ${response.statusText}`)
+        }
+        const data = await response.json()
+        const terrainMetadata: TerrainMetadata = {
+            centerX: data["center_origin"]?.[0] || 0,
+            centerY: data["center_origin"]?.[1] || 0,
+            levels: [],
+        }
+
+        const levelsData = data["levels"] || []
+        for (const levelData of levelsData) {
+            const levelMetadata = TerrainMetadataParser.parseTerrainLevelMetadata(levelData)
+            terrainMetadata.levels.push(levelMetadata)
+        }
+        return terrainMetadata
+    }
+}

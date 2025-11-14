@@ -1,4 +1,4 @@
-import { App } from './App.js'
+import { App } from './App'
 
 window.onload = async () => {
     await App.instance.run()

@@ -6,12 +6,15 @@
     "skipLibCheck": true,
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
-    "allowJs": true,
-    "checkJs": true,
+    "allowImportingTsExtensions": true,
     "noEmit": true,
     "strict": true,
-    "strictNullChecks": true
+    "strictNullChecks": true,
+    "esModuleInterop": true,
+    "isolatedModules": true,
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true
   },
-  "include": ["js/**/*.js"],
+  "include": ["code/**/*.ts"],
   "exclude": ["node_modules"]
 }

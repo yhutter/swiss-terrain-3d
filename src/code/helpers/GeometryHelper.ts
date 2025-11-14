@@ -1,27 +1,11 @@
 import * as THREE from "three"
+
 export class GeometryHelper {
 
-    /** 
-     * @param {number} x
-     * @param {number} y
-     * @param {number} resolution
-     * @returns {number}
-     */
-    static getIndexForGrid(x, y, resolution) {
-        return y * (resolution + 1) + x;
-    }
-
-
-    /** 
-     * Generates a regular grid geometry with an alternating diagonal pattern already rotate as a horizontal plane.
-     * @param {number} resolution
-     * @param {number} size
-     * @returns {THREE.BufferGeometry}
-     */
-    static createRegularGridGeometry(resolution, size) {
-        const positions = [];
-        const indices = [];
-        const uvs = [];
+    static createRegularGridGeometry(resolution: number, size: number): THREE.BufferGeometry {
+        const positions: number[] = [];
+        const indices: number[] = [];
+        const uvs: number[] = [];
 
         const step = size / resolution;
 
@@ -38,7 +22,6 @@ export class GeometryHelper {
                 uvs.push(uvX, uvY);
             }
         }
-
 
         // Generate alternating diagonal pattern
         for (let y = 0; y < resolution; y++) {
@@ -64,5 +47,9 @@ export class GeometryHelper {
         geometry.computeVertexNormals();
 
         return geometry;
+    }
+
+    private static getIndexForGrid(x: number, y: number, resolution: number): number {
+        return y * (resolution + 1) + x;
     }
 }
