@@ -1,4 +1,4 @@
-import * as THREE from "three/build/three.webgpu"
+import * as THREE from "three"
 
 export class TerrainLevelMetadata {
     /** @type {number} */

@@ -1,16 +1,16 @@
 import { HDRLoader, OrbitControls } from "three/examples/jsm/Addons.js"
-import * as THREE from "three/build/three.webgpu"
+import * as THREE from "three"
 import { Pane, FolderApi } from "tweakpane"
 import { Terrain } from "./Terrain.js"
 
 const TERRAIN_METADATA_PATH = "/static/data/output_tiles-sargans/terrain_metadata.json"
 const ENV_MAP_PATH = "/static/maps/envmap-1k.hdr"
 
-const RENDER_SCALE = 0.002
+const RENDER_SCALE = 0.001
 
 export class App {
 
-    /** @type{THREE.WebGPURenderer} */
+    /** @type{THREE.WebGLRenderer} */
     #renderer
 
     /** @type {THREE.PerspectiveCamera} */
@@ -81,7 +81,7 @@ export class App {
 
     constructor() {
         const canvas = document.getElementById("app")
-        this.#renderer = new THREE.WebGPURenderer({
+        this.#renderer = new THREE.WebGLRenderer({
             antialias: true,
             // @ts-ignore
             canvas: canvas
@@ -117,7 +117,6 @@ export class App {
 
 
     async run() {
-        await this.#renderer.init()
         await this.#setupTerrain()
 
         this.#setupHDREnvironment()

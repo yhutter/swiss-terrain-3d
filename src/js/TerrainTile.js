@@ -1,5 +1,8 @@
-import * as THREE from "three/build/three.webgpu"
-import { texture, uv, vec2, float, add, sub, mul, vec3, positionLocal } from "three/build/three.tsl"
+import * as THREE from "three"
+import vertexShader from '../static/shaders/terrain.vert.glsl'
+import fragmentShader from '../static/shaders/terrain.frag.glsl'
+import CustomShaderMaterial from "three-custom-shader-material/vanilla";
+
 
 import { TerrainTileParams } from './TerrainTileParams';
 import { GeometryHelper } from './GeometryHelper.js';
@@ -8,7 +11,7 @@ export class TerrainTile {
     /** @type {THREE.Mesh?} */
     #mesh = null
 
-    /** @type {THREE.MeshStandardNodeMaterial?} */
+    /** @type {CustomShaderMaterial?} */
     #material = null
 
     /** @type {TerrainTileParams} */
@@ -21,6 +24,14 @@ export class TerrainTile {
 
     get material() {
         return this.#material
+    }
+
+    get demTexture() {
+        return this.#params.demTexture
+    }
+
+    get dopTexture() {
+        return this.#params.dopTexture
     }
 
     /** 
@@ -38,16 +49,17 @@ export class TerrainTile {
         )
         geo.rotateX(-Math.PI * 0.5)
 
-        const colorSample = texture(this.#params.dopTexture, uv())
-        const heightSample = texture(this.#params.demTexture, uv()).r;
-        const displacedPosition = add(positionLocal, vec3(0, heightSample, 0));
 
-        this.#material = new THREE.MeshStandardNodeMaterial({
+        this.#material = new CustomShaderMaterial({
+            baseMaterial: THREE.MeshStandardMaterial,
+            vertexShader: vertexShader,
+            fragmentShader: fragmentShader,
+            uniforms: {
+                dopTexture: { value: this.#params.dopTexture },
+                demTexture: { value: this.#params.demTexture }
+            },
             side: THREE.DoubleSide,
             wireframe: wireframe,
-            colorNode: colorSample,
-            positionNode: displacedPosition,
-            displacementMap: this.#params.demTexture,
         })
 
         this.#mesh = new THREE.Mesh(geo, this.#material)

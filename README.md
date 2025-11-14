@@ -20,6 +20,7 @@ python main.py
 ## :package: Libraries
 This project uses the following libraries
 - [ThreeJS](https://threejs.org/)
+- [ThreeJS Custom Shader Material](https://github.com/FarazzShaikh/THREE-CustomShaderMaterial)
 - [TweakPane](https://tweakpane.github.io/docs/)
 - [GDAL (Preprocessing)](https://gdal.org/)
 

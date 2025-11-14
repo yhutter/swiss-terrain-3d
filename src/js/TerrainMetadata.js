@@ -1,4 +1,3 @@
-import * as THREE from "three/build/three.webgpu"
 import { TerrainLevelMetadata } from "./TerrainLevelMetadata.js"
 
 export class TerrainMetadata {
