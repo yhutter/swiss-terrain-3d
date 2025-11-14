@@ -107,7 +107,7 @@ export class Terrain extends THREE.Group {
 
         // Load all tiles of same level
         const exampleTiles = metadata.levels.filter(level => level.level === 0)
-        const defaultResolution = 128
+        const defaultResolution = 64
 
         // Because the tiles are always square we can take either x or y
         const maxTile = Math.max(...exampleTiles.map(t => t.tileX))

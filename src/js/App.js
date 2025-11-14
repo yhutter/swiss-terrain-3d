@@ -6,7 +6,7 @@ import { Terrain } from "./Terrain.js"
 const TERRAIN_METADATA_PATH = "/static/data/output_tiles-sargans/terrain_metadata.json"
 const ENV_MAP_PATH = "/static/maps/envmap-1k.hdr"
 
-const RENDER_SCALE = 0.001
+const RENDER_SCALE = 0.002
 
 export class App {
 
