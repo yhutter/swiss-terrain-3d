@@ -1,7 +1,7 @@
+import * as THREE from "three"
 import { TerrainLevelMetadata } from "./TerrainLevelMetadata"
 
 export interface TerrainMetadata {
-    centerX: number
-    centerY: number
+    bboxWorldSpace: THREE.Box2,
     levels: TerrainLevelMetadata[]
 }

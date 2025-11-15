@@ -42,8 +42,16 @@ export class TerrainMetadataParser {
         }
         const data = await response.json()
         const terrainMetadata: TerrainMetadata = {
-            centerX: data["center_origin"]?.[0] || 0,
-            centerY: data["center_origin"]?.[1] || 0,
+            bboxWorldSpace: new THREE.Box2(
+                new THREE.Vector2(
+                    data["bbox_lv95_world_space"]?.[0] || 0,
+                    data["bbox_lv95_world_space"]?.[1] || 0
+                ),
+                new THREE.Vector2(
+                    data["bbox_lv95_world_space"]?.[2] || 0,
+                    data["bbox_lv95_world_space"]?.[3] || 0
+                )
+            ),
             levels: [],
         }
 

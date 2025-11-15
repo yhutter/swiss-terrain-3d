@@ -566,7 +566,7 @@ def preprocess(dem_input: str, dop_input: str, out_dir: str, chunk_px: int):
 
     bbox_lv95_center = get_bounding_box_center_from_vrt(dem_crop)
     bbox_lv95 = get_bounding_box_from_vrt(dem_crop)
-    bbox_world_space = [
+    bbox_lv95_world_space = [
         0,
         0,
         bbox_lv95[2] - bbox_lv95[0],
@@ -625,7 +625,7 @@ def preprocess(dem_input: str, dop_input: str, out_dir: str, chunk_px: int):
     metadata = {
         "bbox_lv95": bbox_lv95,
         "bbox_lv95_center": bbox_lv95_center,
-        "bbox_world_space": bbox_world_space,
+        "bbox_lv95_world_space": bbox_lv95_world_space,
         "levels": level_metadata,
     }
     meta_path = Path(out_dir) / "terrain_metadata.json"
