@@ -508,7 +508,19 @@ def compute_global_minmax(vrt_path):
     return global_min, global_max
 
 
-def get_center_origin_from_vrt(vrt_path):
+def get_bounding_box_from_vrt(vrt_path):
+    """Gets the bounding from the VRT file."""
+    ds = gdal.Open(vrt_path)
+    gt = ds.GetGeoTransform()
+    minx = gt[0]
+    maxx = gt[0] + ds.RasterXSize * gt[1]
+    miny = gt[3] + ds.RasterYSize * gt[5]
+    maxy = gt[3]
+    ds = None
+    return (minx, miny, maxx, maxy)
+
+
+def get_bounding_box_center_from_vrt(vrt_path):
     """Gets the bounding box center from the VRT file."""
     ds = gdal.Open(vrt_path)
     gt = ds.GetGeoTransform()
@@ -552,7 +564,14 @@ def preprocess(dem_input: str, dop_input: str, out_dir: str, chunk_px: int):
         dop_vrt, str(Path(out_dir) / MOS_DOP_CROP), chunk_px, levels
     )
 
-    center_origin = get_center_origin_from_vrt(dem_crop)
+    bbox_lv95_center = get_bounding_box_center_from_vrt(dem_crop)
+    bbox_lv95 = get_bounding_box_from_vrt(dem_crop)
+    bbox_world_space = [
+        0,
+        0,
+        bbox_lv95[2] - bbox_lv95[0],
+        bbox_lv95[3] - bbox_lv95[1],
+    ]
 
     # DEM LOD pyramid
     dem_root = Path(out_dir) / "dem"
@@ -604,7 +623,9 @@ def preprocess(dem_input: str, dop_input: str, out_dir: str, chunk_px: int):
     print("\nWrite tile metadata...")
     level_metadata = collect_level_metadata(dem_root, dop_root, levels)
     metadata = {
-        "center_origin_lv95": center_origin,
+        "bbox_lv95": bbox_lv95,
+        "bbox_lv95_center": bbox_lv95_center,
+        "bbox_world_space": bbox_world_space,
         "levels": level_metadata,
     }
     meta_path = Path(out_dir) / "terrain_metadata.json"
