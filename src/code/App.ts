@@ -2,6 +2,8 @@ import { HDRLoader, OrbitControls } from "three/examples/jsm/Addons.js"
 import * as THREE from "three"
 import { Pane, FolderApi } from "tweakpane"
 import { Terrain } from "./terrain/Terrain"
+import { Player } from "./Player"
+import { InputHandler } from "./helpers/InputHandler"
 
 const TERRAIN_METADATA_PATH = "/static/data/output_tiles-sargans/terrain_metadata.json"
 const ENV_MAP_PATH = "/static/maps/envmap-1k.hdr"
@@ -14,12 +16,12 @@ export class App {
     private _camera: THREE.PerspectiveCamera
     private _scene: THREE.Scene
     private _clock: THREE.Clock
-    private _terrain: Terrain | null = null
     private _pane: Pane
     private _tweaksFolder: FolderApi
     private _textureLoader: THREE.TextureLoader
     private _hdrLoader: HDRLoader
     private _orbitControls: OrbitControls
+    private _inputHandler: InputHandler
 
     private _sizes = {
         width: 0,
@@ -36,6 +38,10 @@ export class App {
         },
         toneMapping: THREE.NoToneMapping,
     }
+
+    private _terrain: Terrain | null = null
+    private _player: Player | null = null
+
 
     private static _instance: App
 
@@ -56,6 +62,10 @@ export class App {
 
     get scene(): THREE.Scene {
         return this._scene
+    }
+
+    get inputHandler(): InputHandler {
+        return this._inputHandler
     }
 
     constructor() {
@@ -91,10 +101,13 @@ export class App {
 
         this._pane = new Pane()
         this._tweaksFolder = this._pane.addFolder({ title: "Swiss Terrain 3D", expanded: true })
+
+        this._inputHandler = new InputHandler()
     }
 
     async run(): Promise<void> {
         await this.setupTerrain()
+        this.setupPlayer()
 
         this.setupHDREnvironment()
         this.setupTweaks()
@@ -102,6 +115,14 @@ export class App {
         window.addEventListener("resize", () => this.onResize())
 
         this.render()
+    }
+
+    private setupPlayer(): void {
+        if (!this._terrain) return
+
+        const terrainCenter = this._terrain.center
+        const terrainCenterScaled = terrainCenter.clone().multiplyScalar(RENDER_SCALE)
+        this._player = new Player(terrainCenterScaled)
     }
 
     private async setupTerrain(): Promise<void> {
@@ -149,6 +170,7 @@ export class App {
         const dt = this._clock.getDelta()
         this._orbitControls.update()
         this._terrain?.update(dt)
+        this._player?.update(dt)
     }
 
     private render(): void {

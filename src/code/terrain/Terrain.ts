@@ -4,6 +4,7 @@ import { App } from '../App';
 import { TerrainTile } from "./TerrainTile";
 import { TerrainMetadataParser } from "./TerrainMetadataParser";
 import { TerrainLevelMetadata } from "./TerrainLevelMetadata";
+import { TerrainMetadata } from "./TerrainMetadata";
 
 export class Terrain extends THREE.Group {
     private _tweaks = {
@@ -14,6 +15,16 @@ export class Terrain extends THREE.Group {
 
     private _terrainTiles: TerrainTile[] = []
     private _renderScale: number = 1.0
+    private _metadata: TerrainMetadata | null = null
+
+    get center(): THREE.Vector2 {
+        if (!this._metadata) {
+            return new THREE.Vector2(0, 0)
+        }
+        const center = new THREE.Vector2()
+        this._metadata.bboxWorldSpace.getCenter(center)
+        return center
+    }
 
     constructor(renderScale: number) {
         super()
@@ -22,10 +33,10 @@ export class Terrain extends THREE.Group {
     }
 
     async loadTerrain(metadataPath: string): Promise<void> {
-        const metadata = await TerrainMetadataParser.parseFromJson(metadataPath)
+        this._metadata = await TerrainMetadataParser.parseFromJson(metadataPath)
 
         // Load all tiles of same level
-        const exampleTiles = metadata.levels.filter(level => level.level === 0)
+        const exampleTiles = this._metadata.levels.filter(level => level.level === 1)
 
         // Because the tiles are always square we can take either x or y
         const maxTile = Math.max(...exampleTiles.map(t => t.tileX))
