@@ -435,15 +435,7 @@ def get_tile_metadata(tile_path: Path):
         stats = None
 
     if stats is None or ds is None:
-        return {
-            "path": str(tile_path),
-            "valid": False,
-            "bbox": None,
-            "size": None,
-            "min": None,
-            "max": None,
-            "mean": None,
-        }
+        return None
 
     gt = ds.GetGeoTransform()
     width, height = ds.RasterXSize, ds.RasterYSize
@@ -453,8 +445,7 @@ def get_tile_metadata(tile_path: Path):
 
     return {
         "path": str(tile_path),
-        "valid": True,
-        "bbox": [minx, miny, maxx, maxy],
+        "bbox_lv95": [minx, miny, maxx, maxy],
         "size": [width, height],
         "min": stats[0],
         "max": stats[1],
@@ -462,42 +453,43 @@ def get_tile_metadata(tile_path: Path):
     }
 
 
-def collect_level_metadata(dem_root: Path, dop_root: Path, levels: int, center_origin):
+def collect_level_metadata(dem_root: Path, dop_root: Path, levels: int):
     metadata = []
     for L in range(levels):
         dem_tiles = list((dem_root / f"level_{L}" / "tiles").glob("*.tif"))
         for dem_tile in dem_tiles:
             info = get_tile_metadata(dem_tile)
+            if info is None:
+                print(f"Skipping tile with no stats: {dem_tile}")
+                continue
+
             ty, tx = [int(x) for x in dem_tile.stem.split("_")[1:3]]
             dem_image_path = Path(f"{dem_tile}.png")
             dop_tile = dop_root / f"level_{L}" / "tiles" / f"tile_{ty:03d}_{tx:03d}.tif"
             dop_image_path = Path(f"{dop_tile}.png")
 
-            bbox = info["bbox"]
-            normalized_bbox = [
-                bbox[0] - center_origin[0],
-                bbox[1] - center_origin[1],
-                bbox[2] - center_origin[0],
-                bbox[3] - center_origin[1],
+            bbox_lv95 = info["bbox_lv95"]
+            bbox_lv95_width = bbox_lv95[2] - bbox_lv95[0]
+            bbox_lv95_height = bbox_lv95[3] - bbox_lv95[1]
+
+            bbox_lv95_world_space = [
+                tx * bbox_lv95_width,
+                ty * bbox_lv95_height,
+                (tx + 1) * bbox_lv95_width,
+                (ty + 1) * bbox_lv95_height,
             ]
 
             entry = {
-                "id": f"L{L}_{ty:03d}_{tx:03d}",
-                "valid": info["valid"],
                 "level": L,
                 "tile_x": tx,
                 "tile_y": ty,
                 "dem_tif_path": str(dem_tile),
-                "dem_image_path": str(dem_image_path)
-                if dem_image_path.exists()
-                else None,
+                "dem_image_path": str(dem_image_path),
                 "dop_tif_path": str(dop_tile),
-                "dop_image_path": str(dop_image_path)
-                if dop_image_path.exists()
-                else None,
-                "bbox": bbox,
-                "normalized_bbox": normalized_bbox,
-                "size": info["size"],
+                "dop_image_path": str(dop_image_path),
+                "bbox_lv95": bbox_lv95,
+                "bbox_lv95_world_space": bbox_lv95_world_space,
+                "size_px": info["size"],
                 "min_elev": info["min"],
                 "max_elev": info["max"],
                 "mean_elev": info["mean"],
@@ -610,9 +602,9 @@ def preprocess(dem_input: str, dop_input: str, out_dir: str, chunk_px: int):
 
     # Metadata
     print("\nWrite tile metadata...")
-    level_metadata = collect_level_metadata(dem_root, dop_root, levels, center_origin)
+    level_metadata = collect_level_metadata(dem_root, dop_root, levels)
     metadata = {
-        "center_origin": center_origin,
+        "center_origin_lv95": center_origin,
         "levels": level_metadata,
     }
     meta_path = Path(out_dir) / "terrain_metadata.json"
