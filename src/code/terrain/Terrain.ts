@@ -3,6 +3,7 @@ import { TerrainTileParams } from './TerrainTileParams';
 import { App } from '../App';
 import { TerrainTile } from "./TerrainTile";
 import { TerrainMetadataParser } from "./TerrainMetadataParser";
+import { TerrainLevelMetadata } from "./TerrainLevelMetadata";
 
 export class Terrain extends THREE.Group {
     private _tweaks = {
@@ -24,7 +25,7 @@ export class Terrain extends THREE.Group {
         const metadata = await TerrainMetadataParser.parseFromJson(metadataPath)
 
         // Load all tiles of same level
-        const exampleTiles = metadata.levels.filter(level => level.level === 1)
+        const exampleTiles = metadata.levels.filter(level => level.level === 0)
 
         // Because the tiles are always square we can take either x or y
         const maxTile = Math.max(...exampleTiles.map(t => t.tileX))
@@ -111,7 +112,8 @@ export class Terrain extends THREE.Group {
         demTexture.minFilter = THREE.LinearFilter
         demTexture.magFilter = THREE.LinearFilter
 
-        const boundingBoxSize = tileInfo.normalizeBoundingBox.getSize(new THREE.Vector2())
+        // We assume that all bounding boxes are square
+        const boundingBoxSize = tileInfo.bboxWorldSpace.getSize(new THREE.Vector2())
         const size = boundingBoxSize.x * this._renderScale
 
         const terrainTileParams: TerrainTileParams = {
@@ -123,9 +125,8 @@ export class Terrain extends THREE.Group {
         }
         const terrainTile = new TerrainTile(terrainTileParams)
 
-        const tileSize = boundingBoxSize.x * this._renderScale;
-        const posX = (tileInfo.tileX - 0.5 * maxTile) * tileSize;
-        const posZ = (tileInfo.tileY - 0.5 * maxTile) * tileSize;
+        const posX = tileInfo.bboxWorldSpace.min.x * this._renderScale;
+        const posZ = tileInfo.bboxWorldSpace.min.y * this._renderScale;
 
         terrainTile.mesh?.position.set(
             posX,

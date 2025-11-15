@@ -6,6 +6,7 @@ import { Terrain } from "./terrain/Terrain"
 const TERRAIN_METADATA_PATH = "/static/data/output_tiles-sargans/terrain_metadata.json"
 const ENV_MAP_PATH = "/static/maps/envmap-1k.hdr"
 
+// We receive the units in meters (for example 1000 meters). To have a more manageable scale in the 3D scene, we apply a render scale of 0.001 so that 1000 meters becomes 1 unit in the 3D scene.
 const RENDER_SCALE = 0.001
 
 export class App {

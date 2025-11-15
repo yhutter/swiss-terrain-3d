@@ -4,7 +4,7 @@ export interface TerrainLevelMetadata {
     level: number
     demImagePath: string
     dopImagePath: string
-    normalizeBoundingBox: THREE.Box2
+    bboxWorldSpace: THREE.Box2
     minElevation: number
     maxElevation: number
     meanElevation: number

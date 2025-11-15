@@ -39,13 +39,16 @@ export class TerrainTile {
         )
         geo.rotateX(-Math.PI * 0.5)
 
+        const randomTintColor = new THREE.Color(Math.random(), Math.random(), Math.random())
+
         this._material = new CustomShaderMaterial({
             baseMaterial: THREE.MeshStandardMaterial,
             vertexShader: vertexShader,
             fragmentShader: fragmentShader,
             uniforms: {
-                dopTexture: { value: this._params.dopTexture },
-                demTexture: { value: this._params.demTexture }
+                uDopTexture: { value: this._params.dopTexture },
+                uTintColor: { value: randomTintColor },
+                uDemTexture: { value: this._params.demTexture }
             },
             side: THREE.DoubleSide,
             wireframe: wireframe,
