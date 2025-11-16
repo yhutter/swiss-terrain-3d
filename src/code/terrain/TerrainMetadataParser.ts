@@ -1,6 +1,7 @@
 import * as THREE from "three"
 import { TerrainLevelMetadata } from "./TerrainLevelMetadata"
 import { TerrainMetadata } from "./TerrainMetadata"
+import { App } from "../App"
 
 export class TerrainMetadataParser {
     private static cleanUpImagePath(path: string): string {
@@ -12,18 +13,18 @@ export class TerrainMetadataParser {
     }
 
     private static parseTerrainLevelMetadata(data: any): TerrainLevelMetadata {
-        return {
+        const terrainLevelMetadata: TerrainLevelMetadata = {
             level: data["level"] || 0,
             demImagePath: TerrainMetadataParser.cleanUpImagePath(data["dem_image_path"] || ""),
             dopImagePath: TerrainMetadataParser.cleanUpImagePath(data["dop_image_path"] || ""),
             bboxWorldSpace: new THREE.Box2(
                 new THREE.Vector2(
-                    data["bbox_lv95_world_space"]?.[0] || 0,
-                    data["bbox_lv95_world_space"]?.[1] || 0
+                    data["bbox_lv95_world_space_grid_alligned"]?.[0] || 0,
+                    data["bbox_lv95_world_space_grid_alligned"]?.[1] || 0
                 ),
                 new THREE.Vector2(
-                    data["bbox_lv95_world_space"]?.[2] || 0,
-                    data["bbox_lv95_world_space"]?.[3] || 0
+                    data["bbox_lv95_world_space_grid_alligned"]?.[2] || 0,
+                    data["bbox_lv95_world_space_grid_alligned"]?.[3] || 0
                 )
             ),
             minElevation: data["min_elevation"] || 0.0,
@@ -32,6 +33,11 @@ export class TerrainMetadataParser {
             tileX: data["tile_x"] || 0,
             tileY: data["tile_y"] || 0,
         }
+
+        terrainLevelMetadata.bboxWorldSpace.min.multiplyScalar(App.instance.renderScale)
+        terrainLevelMetadata.bboxWorldSpace.max.multiplyScalar(App.instance.renderScale)
+
+        return terrainLevelMetadata
     }
 
 

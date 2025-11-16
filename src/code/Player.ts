@@ -7,7 +7,7 @@ export class Player {
     private _size = 0.04
     private _mesh: THREE.Mesh
 
-    constructor(position: THREE.Vector2) {
+    constructor(position: THREE.Vector3) {
         this._position.set(position.x, 0.1, position.y)
         const material = new THREE.MeshBasicMaterial({ color: 0xffffff })
         const geometry = new THREE.SphereGeometry(this._size, 16, 16)

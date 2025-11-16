@@ -453,8 +453,11 @@ def get_tile_metadata(tile_path: Path):
     }
 
 
-def collect_level_metadata(dem_root: Path, dop_root: Path, levels: int):
+def collect_level_metadata(
+    dem_root: Path, dop_root: Path, levels: int, chunk_px, center
+):
     metadata = []
+    cx, cy = center
     for L in range(levels):
         dem_tiles = list((dem_root / f"level_{L}" / "tiles").glob("*.tif"))
         for dem_tile in dem_tiles:
@@ -469,14 +472,38 @@ def collect_level_metadata(dem_root: Path, dop_root: Path, levels: int):
             dop_image_path = Path(f"{dop_tile}.png")
 
             bbox_lv95 = info["bbox_lv95"]
-            bbox_lv95_width = bbox_lv95[2] - bbox_lv95[0]
-            bbox_lv95_height = bbox_lv95[3] - bbox_lv95[1]
 
             bbox_lv95_world_space = [
-                tx * bbox_lv95_width,
-                ty * bbox_lv95_height,
-                (tx + 1) * bbox_lv95_width,
-                (ty + 1) * bbox_lv95_height,
+                bbox_lv95[0] - cx,
+                bbox_lv95[1] - cy,
+                bbox_lv95[2] - cx,
+                bbox_lv95[3] - cy,
+            ]
+
+            bbox_lv95_grid_alligned = [
+                bbox_lv95[0],
+                bbox_lv95[1],
+                bbox_lv95[2],
+                bbox_lv95[3],
+            ]
+
+            # Because we have a 1px overlap the Lv95 coordinates are not perfectly alligned to the grid.
+            # We cheat a little here by shifting the lv95 coordinate to be allgined with the grid.
+            # We do this by making sure the lv95 coordinates are a multiple of the chunk size multiplied by the resolution of the swisstopo dataset (e.g. 2m per pixel).
+            resolution = 2  # meters per pixel
+            chunk_size_m = chunk_px * resolution
+            bbox_lv95_grid_alligned = [
+                round(bbox_lv95[0] / chunk_size_m) * chunk_size_m,
+                round(bbox_lv95[1] / chunk_size_m) * chunk_size_m,
+                round(bbox_lv95[2] / chunk_size_m) * chunk_size_m,
+                round(bbox_lv95[3] / chunk_size_m) * chunk_size_m,
+            ]
+
+            bbox_lv95_world_space_grid_alligned = [
+                bbox_lv95_grid_alligned[0] - cx,
+                bbox_lv95_grid_alligned[1] - cy,
+                bbox_lv95_grid_alligned[2] - cx,
+                bbox_lv95_grid_alligned[3] - cy,
             ]
 
             entry = {
@@ -488,7 +515,9 @@ def collect_level_metadata(dem_root: Path, dop_root: Path, levels: int):
                 "dop_tif_path": str(dop_tile),
                 "dop_image_path": str(dop_image_path),
                 "bbox_lv95": bbox_lv95,
+                "bbox_lv95_grid_alligned": bbox_lv95_grid_alligned,
                 "bbox_lv95_world_space": bbox_lv95_world_space,
+                "bbox_lv95_world_space_grid_alligned": bbox_lv95_world_space_grid_alligned,
                 "size_px": info["size"],
                 "min_elev": info["min"],
                 "max_elev": info["max"],
@@ -566,11 +595,12 @@ def preprocess(dem_input: str, dop_input: str, out_dir: str, chunk_px: int):
 
     bbox_lv95_center = get_bounding_box_center_from_vrt(dem_crop)
     bbox_lv95 = get_bounding_box_from_vrt(dem_crop)
+
     bbox_lv95_world_space = [
-        0,
-        0,
-        bbox_lv95[2] - bbox_lv95[0],
-        bbox_lv95[3] - bbox_lv95[1],
+        bbox_lv95[0] - bbox_lv95_center[0],
+        bbox_lv95[1] - bbox_lv95_center[1],
+        bbox_lv95[2] - bbox_lv95_center[0],
+        bbox_lv95[3] - bbox_lv95_center[1],
     ]
 
     # DEM LOD pyramid
@@ -621,7 +651,9 @@ def preprocess(dem_input: str, dop_input: str, out_dir: str, chunk_px: int):
 
     # Metadata
     print("\nWrite tile metadata...")
-    level_metadata = collect_level_metadata(dem_root, dop_root, levels)
+    level_metadata = collect_level_metadata(
+        dem_root, dop_root, levels, chunk_px, bbox_lv95_center
+    )
     metadata = {
         "bbox_lv95": bbox_lv95,
         "bbox_lv95_center": bbox_lv95_center,

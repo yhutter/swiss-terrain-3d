@@ -14,21 +14,23 @@ export class Terrain extends THREE.Group {
     }
 
     private _terrainTiles: TerrainTile[] = []
-    private _renderScale: number = 1.0
     private _metadata: TerrainMetadata | null = null
 
-    get center(): THREE.Vector2 {
+    get center(): THREE.Vector3 {
         if (!this._metadata) {
-            return new THREE.Vector2(0, 0)
+            return new THREE.Vector3(0)
         }
         const center = new THREE.Vector2()
         this._metadata.bboxWorldSpace.getCenter(center)
-        return center
+        return new THREE.Vector3(
+            center.x,
+            0,
+            center.y,
+        )
     }
 
-    constructor(renderScale: number) {
+    constructor() {
         super()
-        this._renderScale = renderScale
         this.setupTweaks()
     }
 
@@ -36,7 +38,7 @@ export class Terrain extends THREE.Group {
         this._metadata = await TerrainMetadataParser.parseFromJson(metadataPath)
 
         // Load all tiles of same level
-        const exampleTiles = this._metadata.levels.filter(level => level.level === 1)
+        const exampleTiles = this._metadata.levels.filter(level => level.level === 0)
 
         // Because the tiles are always square we can take either x or y
         const maxTile = Math.max(...exampleTiles.map(t => t.tileX))
@@ -123,9 +125,8 @@ export class Terrain extends THREE.Group {
         demTexture.minFilter = THREE.LinearFilter
         demTexture.magFilter = THREE.LinearFilter
 
-        // We assume that all bounding boxes are square
         const boundingBoxSize = tileInfo.bboxWorldSpace.getSize(new THREE.Vector2())
-        const size = boundingBoxSize.x * this._renderScale
+        const size = boundingBoxSize.x
 
         const terrainTileParams: TerrainTileParams = {
             size,
@@ -136,8 +137,11 @@ export class Terrain extends THREE.Group {
         }
         const terrainTile = new TerrainTile(terrainTileParams)
 
-        const posX = tileInfo.bboxWorldSpace.min.x * this._renderScale;
-        const posZ = tileInfo.bboxWorldSpace.min.y * this._renderScale;
+
+        const center = new THREE.Vector2()
+        tileInfo.bboxWorldSpace.getCenter(center)
+        const posX = center.x
+        const posZ = -center.y
 
         terrainTile.mesh?.position.set(
             posX,

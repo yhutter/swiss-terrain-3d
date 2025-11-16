@@ -5,13 +5,14 @@ import { Terrain } from "./terrain/Terrain"
 import { Player } from "./Player"
 import { InputHandler } from "./helpers/InputHandler"
 
-const TERRAIN_METADATA_PATH = "/static/data/output_tiles-sargans/terrain_metadata.json"
-const ENV_MAP_PATH = "/static/maps/envmap-1k.hdr"
-
-// We receive the units in meters (for example 1000 meters). To have a more manageable scale in the 3D scene, we apply a render scale of 0.001 so that 1000 meters becomes 1 unit in the 3D scene.
-const RENDER_SCALE = 0.001
 
 export class App {
+    private _terrainMetadataPath = "/static/data/output_tiles-sargans/terrain_metadata.json"
+    private _envMapPath = "/static/maps/envmap-1k.hdr"
+
+    // We receive the units in meters (for example 1000 meters). To have a more manageable scale in the 3D scene, we apply a render scale of 0.001 so that 1000 meters becomes 1 unit in the 3D scene.
+    private _renderScale = 0.001
+
     private _renderer: THREE.WebGLRenderer
     private _camera: THREE.PerspectiveCamera
     private _scene: THREE.Scene
@@ -68,6 +69,10 @@ export class App {
         return this._inputHandler
     }
 
+    get renderScale(): number {
+        return this._renderScale
+    }
+
     constructor() {
         const canvas = document.getElementById("app") as HTMLCanvasElement
         this._renderer = new THREE.WebGLRenderer({
@@ -88,7 +93,7 @@ export class App {
 
         const aspect = this._sizes.width / this._sizes.height
         this._camera = new THREE.PerspectiveCamera(75, aspect, 0.01, 1000)
-        this._camera.position.set(0, 1, 2)
+        this._camera.position.set(0, 3, 0)
 
         this._orbitControls = new OrbitControls(this._camera, this._renderer.domElement)
         this._orbitControls.enableDamping = true
@@ -109,6 +114,9 @@ export class App {
         await this.setupTerrain()
         this.setupPlayer()
 
+        const terrainCenter = this._terrain!.center
+        this._camera.lookAt(terrainCenter)
+
         this.setupHDREnvironment()
         this.setupTweaks()
 
@@ -121,17 +129,16 @@ export class App {
         if (!this._terrain) return
 
         const terrainCenter = this._terrain.center
-        const terrainCenterScaled = terrainCenter.clone().multiplyScalar(RENDER_SCALE)
-        this._player = new Player(terrainCenterScaled)
+        this._player = new Player(terrainCenter)
     }
 
     private async setupTerrain(): Promise<void> {
-        this._terrain = new Terrain(RENDER_SCALE)
-        await this._terrain.loadTerrain(TERRAIN_METADATA_PATH)
+        this._terrain = new Terrain()
+        await this._terrain.loadTerrain(this._terrainMetadataPath)
     }
 
     private async setupHDREnvironment(): Promise<void> {
-        const envMap = await this._hdrLoader.loadAsync(ENV_MAP_PATH)
+        const envMap = await this._hdrLoader.loadAsync(this._envMapPath)
         envMap.mapping = THREE.EquirectangularReflectionMapping
         this._scene.environment = envMap
     }
