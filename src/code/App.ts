@@ -4,7 +4,8 @@ import { Pane, FolderApi } from "tweakpane"
 import { Terrain } from "./terrain/Terrain"
 import { Player } from "./Player"
 import { InputHandler } from "./helpers/InputHandler"
-
+import { QuadTree } from "./quadtree/QuadTree"
+import { QuadTreeHelper } from "./quadtree/QuadTreeHelper"
 
 export class App {
     private _terrainMetadataPath = "/static/data/output_tiles-sargans/terrain_metadata.json"
@@ -42,6 +43,8 @@ export class App {
 
     private _terrain: Terrain | null = null
     private _player: Player | null = null
+    private _quadTree: QuadTree | null = null
+    private _quadTreeHelper: QuadTreeHelper | null = null
 
 
     private static _instance: App
@@ -112,7 +115,21 @@ export class App {
 
     async run(): Promise<void> {
         await this.setupTerrain()
+
+        // No point in continuing if terrain failed to load
+        if (!this._terrain) {
+            console.error("Failed to load terrain!")
+            return
+        }
+
         this.setupPlayer()
+
+        const maxDepth = this._terrain.maxLevel
+        this._quadTree = new QuadTree(this._terrain.boundingBox!, maxDepth)
+
+        this._quadTreeHelper = new QuadTreeHelper(this._quadTree)
+        this._scene.add(this._quadTreeHelper)
+
 
         const terrainCenter = this._terrain!.center
         this._camera.lookAt(terrainCenter)
@@ -178,6 +195,8 @@ export class App {
         this._orbitControls.update()
         this._terrain?.update(dt)
         this._player?.update(dt)
+        this._quadTree?.insertPosition(this._player!.position2D)
+        this._quadTreeHelper?.update()
     }
 
     private render(): void {

@@ -29,6 +29,20 @@ export class Terrain extends THREE.Group {
         )
     }
 
+    get maxLevel(): number {
+        if (!this._metadata) {
+            return 0
+        }
+        return Math.max(...this._metadata.levels.map(level => level.level))
+    }
+
+    get boundingBox(): THREE.Box2 | null {
+        if (!this._metadata) {
+            return null
+        }
+        return this._metadata.bboxWorldSpace
+    }
+
     constructor() {
         super()
         this.setupTweaks()

@@ -61,6 +61,9 @@ export class TerrainMetadataParser {
             levels: [],
         }
 
+        terrainMetadata.bboxWorldSpace.min.multiplyScalar(App.instance.renderScale)
+        terrainMetadata.bboxWorldSpace.max.multiplyScalar(App.instance.renderScale)
+
         const levelsData = data["levels"] || []
         for (const levelData of levelsData) {
             const levelMetadata = TerrainMetadataParser.parseTerrainLevelMetadata(levelData)

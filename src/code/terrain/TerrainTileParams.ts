@@ -1,6 +1,6 @@
 import * as THREE from "three"
 
-export interface TerrainTileParams {
+export type TerrainTileParams = {
     size: number
     resolution: number
     dopTexture: THREE.Texture

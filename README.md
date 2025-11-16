@@ -21,6 +21,9 @@ python main.py
 This project uses the following libraries
 - [ThreeJS](https://threejs.org/)
 - [ThreeJS Custom Shader Material](https://github.com/FarazzShaikh/THREE-CustomShaderMaterial)
+- [SimonDev GameDev Course](https://simondev.io/courses/)
+- [SimonDev Quadtree & LOD](https://www.youtube.com/watch?v=YO_A5w_fxRQ)
+- [SimonDev Quadtree Implementation](https://github.com/simondevyoutube/ProceduralTerrain_Part3)
 - [TweakPane](https://tweakpane.github.io/docs/)
 - [GDAL (Preprocessing)](https://gdal.org/)
 

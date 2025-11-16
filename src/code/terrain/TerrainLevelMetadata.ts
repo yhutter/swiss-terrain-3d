@@ -1,6 +1,6 @@
 import * as THREE from "three"
 
-export interface TerrainLevelMetadata {
+export type TerrainLevelMetadata = {
     level: number
     demImagePath: string
     dopImagePath: string

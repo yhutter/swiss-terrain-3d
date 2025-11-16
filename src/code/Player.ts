@@ -7,6 +7,14 @@ export class Player {
     private _size = 0.04
     private _mesh: THREE.Mesh
 
+    get position(): THREE.Vector3 {
+        return this._position
+    }
+
+    get position2D(): THREE.Vector2 {
+        return new THREE.Vector2(this._position.x, this._position.z)
+    }
+
     constructor(position: THREE.Vector3) {
         this._position.set(position.x, 0.1, position.y)
         const material = new THREE.MeshBasicMaterial({ color: 0xffffff })
