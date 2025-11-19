@@ -23,6 +23,12 @@ export class TerrainTile {
         return this._params.demTexture
     }
 
+    set useDemTexture(value: boolean) {
+        if (this._material) {
+            this._material.uniforms.uUseDemTexture.value = value
+        }
+    }
+
     get dopTexture(): THREE.Texture {
         return this._params.dopTexture
     }
@@ -48,7 +54,8 @@ export class TerrainTile {
             uniforms: {
                 uDopTexture: { value: this._params.dopTexture },
                 uTintColor: { value: randomTintColor },
-                uDemTexture: { value: this._params.demTexture }
+                uDemTexture: { value: this._params.demTexture },
+                uUseDemTexture: { value: true },
             },
             side: THREE.DoubleSide,
             wireframe: wireframe,

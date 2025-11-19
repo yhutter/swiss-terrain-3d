@@ -16,6 +16,9 @@ export class App {
 
     private _renderer: THREE.WebGLRenderer
     private _camera: THREE.PerspectiveCamera
+    private _defaultCameraPosition = new THREE.Vector3(0, 1, 2)
+    private _cameraQuadTreeVisualization: THREE.PerspectiveCamera
+    private _defaultQuadTreeVisualizationCameraPosition = new THREE.Vector3(0, 3, 0)
     private _scene: THREE.Scene
     private _clock: THREE.Clock
     private _pane: Pane
@@ -39,6 +42,7 @@ export class App {
             "Reinhard": THREE.ReinhardToneMapping,
         },
         toneMapping: THREE.NoToneMapping,
+        enableQuadTreeHelper: true,
     }
 
     private _terrain: Terrain | null = null
@@ -95,8 +99,12 @@ export class App {
         this._hdrLoader = new HDRLoader()
 
         const aspect = this._sizes.width / this._sizes.height
+
         this._camera = new THREE.PerspectiveCamera(75, aspect, 0.01, 1000)
-        this._camera.position.set(0, 3, 0)
+        this._camera.position.copy(this._defaultCameraPosition)
+
+        this._cameraQuadTreeVisualization = new THREE.PerspectiveCamera(75, aspect, 0.01, 1000)
+        this._cameraQuadTreeVisualization.position.copy(this._defaultQuadTreeVisualizationCameraPosition)
 
         this._orbitControls = new OrbitControls(this._camera, this._renderer.domElement)
         this._orbitControls.enableDamping = true
@@ -123,6 +131,7 @@ export class App {
         }
 
         this.setupPlayer()
+        this._cameraQuadTreeVisualization.lookAt(this._player!.position)
 
         const maxDepth = this._terrain.maxLevel
         this._quadTree = new QuadTree(this._terrain.boundingBox!, maxDepth)
@@ -136,6 +145,8 @@ export class App {
 
         this.setupHDREnvironment()
         this.setupTweaks()
+
+        this.toggleQuadTreeHelperVisualization(this._tweaks.enableQuadTreeHelper)
 
         window.addEventListener("resize", () => this.onResize())
 
@@ -160,6 +171,17 @@ export class App {
         this._scene.environment = envMap
     }
 
+    private toggleQuadTreeHelperVisualization(enabled: boolean): void {
+        if (enabled) {
+            this._quadTreeHelper!.visible = true
+            this._terrain!.shouldUseDemTexture(false)
+        }
+        else {
+            this._quadTreeHelper!.visible = false
+            this._terrain!.shouldUseDemTexture(true)
+        }
+    }
+
     private setupTweaks(): void {
         this._tweaksFolder.addBinding(this._tweaks, "background", {
             label: "Background Color",
@@ -174,6 +196,12 @@ export class App {
             options: this._tweaks.toneMappingOptions
         }).on("change", (e) => {
             this._renderer.toneMapping = e.value
+        })
+
+        this._tweaksFolder.addBinding(this._tweaks, "enableQuadTreeHelper", {
+            label: "Show QuadTree Helper"
+        }).on("change", (e) => {
+            this.toggleQuadTreeHelperVisualization(e.value)
         })
     }
 
@@ -201,7 +229,8 @@ export class App {
 
     private render(): void {
         this.update()
-        this._renderer.render(this._scene, this._camera)
+        const camera = this._tweaks.enableQuadTreeHelper ? this._cameraQuadTreeVisualization : this._camera
+        this._renderer.render(this._scene, camera)
         window.requestAnimationFrame(() => this.render())
     }
 }

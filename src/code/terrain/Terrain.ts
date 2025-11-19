@@ -48,6 +48,12 @@ export class Terrain extends THREE.Group {
         this.setupTweaks()
     }
 
+    shouldUseDemTexture(shouldUse: boolean): void {
+        for (const tile of this._terrainTiles) {
+            tile.useDemTexture = shouldUse
+        }
+    }
+
     async loadTerrain(metadataPath: string): Promise<void> {
         this._metadata = await TerrainMetadataParser.parseFromJson(metadataPath)
 
