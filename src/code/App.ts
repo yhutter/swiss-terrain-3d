@@ -42,11 +42,12 @@ export class App {
             "Reinhard": THREE.ReinhardToneMapping,
         },
         toneMapping: THREE.NoToneMapping,
-        enableQuadTreeHelper: true,
+        enableQuadTreeVisualization: true,
     }
 
     private _terrain: Terrain | null = null
     private _player: Player | null = null
+    private _playerStartPosition: THREE.Vector3 | null = null
     private _quadTree: QuadTree | null = null
     private _quadTreeHelper: QuadTreeHelper | null = null
 
@@ -131,7 +132,6 @@ export class App {
         }
 
         this.setupPlayer()
-        this._cameraQuadTreeVisualization.lookAt(this._player!.position)
 
         const maxDepth = this._terrain.maxLevel
         this._quadTree = new QuadTree(this._terrain.boundingBox!, maxDepth)
@@ -146,7 +146,7 @@ export class App {
         this.setupHDREnvironment()
         this.setupTweaks()
 
-        this.toggleQuadTreeHelperVisualization(this._tweaks.enableQuadTreeHelper)
+        this.toggleQuadTreeVisualization(this._tweaks.enableQuadTreeVisualization)
 
         window.addEventListener("resize", () => this.onResize())
 
@@ -157,7 +157,15 @@ export class App {
         if (!this._terrain) return
 
         const terrainCenter = this._terrain.center
-        this._player = new Player(terrainCenter)
+        this._playerStartPosition = new THREE.Vector3(
+            terrainCenter.x + 1,
+            0.0,
+            terrainCenter.z + 1,
+        )
+        this._player = new Player(this._playerStartPosition)
+        this._cameraQuadTreeVisualization.position.x = this._playerStartPosition.x
+        this._cameraQuadTreeVisualization.position.z = this._playerStartPosition.z
+        this._cameraQuadTreeVisualization.rotation.x = -Math.PI / 2
     }
 
     private async setupTerrain(): Promise<void> {
@@ -171,7 +179,7 @@ export class App {
         this._scene.environment = envMap
     }
 
-    private toggleQuadTreeHelperVisualization(enabled: boolean): void {
+    private toggleQuadTreeVisualization(enabled: boolean): void {
         if (enabled) {
             this._quadTreeHelper!.visible = true
             this._terrain!.shouldUseDemTexture(false)
@@ -198,10 +206,10 @@ export class App {
             this._renderer.toneMapping = e.value
         })
 
-        this._tweaksFolder.addBinding(this._tweaks, "enableQuadTreeHelper", {
-            label: "Show QuadTree Helper"
+        this._tweaksFolder.addBinding(this._tweaks, "enableQuadTreeVisualization", {
+            label: "Enable QuadTree Visualization"
         }).on("change", (e) => {
-            this.toggleQuadTreeHelperVisualization(e.value)
+            this.toggleQuadTreeVisualization(e.value)
         })
     }
 
@@ -216,6 +224,9 @@ export class App {
         const aspect = this._sizes.width / this._sizes.height
         this._camera.aspect = aspect
         this._camera.updateProjectionMatrix()
+
+        this._cameraQuadTreeVisualization.aspect = aspect
+        this._cameraQuadTreeVisualization.updateProjectionMatrix()
     }
 
     private update(): void {
@@ -225,11 +236,15 @@ export class App {
         this._player?.update(dt)
         this._quadTree?.insertPosition(this._player!.position2D)
         this._quadTreeHelper?.update()
+
+        // Track player position
+        this._cameraQuadTreeVisualization.position.x = this._player!.position.x
+        this._cameraQuadTreeVisualization.position.z = this._player!.position.z
     }
 
     private render(): void {
         this.update()
-        const camera = this._tweaks.enableQuadTreeHelper ? this._cameraQuadTreeVisualization : this._camera
+        const camera = this._tweaks.enableQuadTreeVisualization ? this._cameraQuadTreeVisualization : this._camera
         this._renderer.render(this._scene, camera)
         window.requestAnimationFrame(() => this.render())
     }

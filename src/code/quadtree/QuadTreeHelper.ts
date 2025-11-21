@@ -36,7 +36,7 @@ export class QuadTreeHelper extends THREE.LineSegments {
 
         const vertices = []
         const colors = []
-        const minHeight = 0.01
+        const minHeight = 0.0
 
         for (let i = 0; i < bounds.length; i++) {
             const b = bounds[i];
