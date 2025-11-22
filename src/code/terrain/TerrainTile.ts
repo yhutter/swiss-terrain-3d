@@ -37,6 +37,17 @@ export class TerrainTile {
         return this._params.dopTexture
     }
 
+    dispose() {
+        if (this._mesh) {
+            this._mesh.geometry.dispose()
+        }
+        if (this._material) {
+            this._material.dispose()
+        }
+        this._params.dopTexture.dispose()
+        this._params.demTexture.dispose()
+    }
+
     constructor(params: TerrainTileParams) {
         this._params = params
         const resolution = this._params.resolution

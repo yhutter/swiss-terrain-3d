@@ -62,9 +62,22 @@ export class Terrain extends THREE.Group {
 
     update(dt: number, quadTreeNodes: QuadTreeNode[]) {
         const resolution = 33
+        // Figure out which tiles we can remove, e.g. tiles that are not in the quadTreeNodes.
+        for (const tile of this._terrainTiles) {
+            const foundNode = quadTreeNodes.find(node => node.id === tile.id)
+            if (!foundNode) {
+                // Remove tile
+                this.remove(tile.mesh)
+                const tileIndex = this._terrainTiles.indexOf(tile)
+                this._terrainTiles.splice(tileIndex, 1)
+                tile.dispose()
+            }
+        }
+
         for (const node of quadTreeNodes) {
             const foundExistingTile = this._terrainTiles.find(tile => tile.id === node.id)
             if (foundExistingTile) {
+                foundExistingTile.useDemTexture = this._shouldUseDemTexture
                 continue
             }
             TerrainTileManager.requestTerrainTileForNode(node, this._tweaks.anisotropy, resolution, this._tweaks.wireframe, this._shouldUseDemTexture).then((tile) => {
