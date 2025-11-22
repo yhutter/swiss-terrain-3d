@@ -304,14 +304,15 @@ def build_vrt_lods(src_vrt: str, out_root: str, levels: int, extent):
     ds = None
 
     for L in range(levels):
-        lvl_dir = Path(out_root) / f"level_{L}"
+        target_level = levels - L - 1  # L0 = highest resolution
+        lvl_dir = Path(out_root) / f"level_{target_level}"
         lvl_dir.mkdir(parents=True, exist_ok=True)
-        out_vrt = str(lvl_dir / f"mosaic_L{L}.vrt")
+        out_vrt = str(lvl_dir / f"mosaic_L{target_level}.vrt")
 
         W_out = W // (2**L)
         H_out = H // (2**L)
 
-        print(f"L{L}: {W_out}×{H_out} px")
+        print(f"L{target_level}: {W_out}×{H_out} px")
         gdal.Warp(
             out_vrt,
             src_vrt,
@@ -459,7 +460,8 @@ def collect_level_metadata(
     metadata = []
     cx, cy = center
     for L in range(levels):
-        dem_tiles = list((dem_root / f"level_{L}" / "tiles").glob("*.tif"))
+        lod_level = levels - L - 1
+        dem_tiles = list((dem_root / f"level_{lod_level}" / "tiles").glob("*.tif"))
         for dem_tile in dem_tiles:
             info = get_tile_metadata(dem_tile)
             if info is None:
@@ -468,7 +470,12 @@ def collect_level_metadata(
 
             ty, tx = [int(x) for x in dem_tile.stem.split("_")[1:3]]
             dem_image_path = Path(f"{dem_tile}.png")
-            dop_tile = dop_root / f"level_{L}" / "tiles" / f"tile_{ty:03d}_{tx:03d}.tif"
+            dop_tile = (
+                dop_root
+                / f"level_{lod_level}"
+                / "tiles"
+                / f"tile_{ty:03d}_{tx:03d}.tif"
+            )
             dop_image_path = Path(f"{dop_tile}.png")
 
             bbox_lv95 = info["bbox_lv95"]
@@ -506,8 +513,9 @@ def collect_level_metadata(
                 bbox_lv95_grid_alligned[3] - cy,
             ]
 
+            lod_level = levels - L - 1
             entry = {
-                "level": L,
+                "level": lod_level,
                 "tile_x": tx,
                 "tile_y": ty,
                 "dem_tif_path": str(dem_tile),
@@ -616,14 +624,20 @@ def preprocess(dem_input: str, dop_input: str, out_dir: str, chunk_px: int):
     # Tiling process
     print("\nTiling DEM levels...")
     for L in range(levels):
-        level_vrt = str(dem_root / f"level_{L}" / f"mosaic_L{L}.vrt")
-        tiles_out = str(dem_root / f"level_{L}" / "tiles")
+        target_level = levels - L - 1
+        level_vrt = str(
+            dem_root / f"level_{target_level}" / f"mosaic_L{target_level}.vrt"
+        )
+        tiles_out = str(dem_root / f"level_{target_level}" / "tiles")
         tile_vrt_lod(level_vrt, tiles_out, chunk_px)
 
     print("\nTiling DOP levels...")
     for L in range(levels):
-        level_vrt = str(dop_root / f"level_{L}" / f"mosaic_L{L}.vrt")
-        tiles_out = str(dop_root / f"level_{L}" / "tiles")
+        target_level = levels - L - 1
+        level_vrt = str(
+            dop_root / f"level_{target_level}" / f"mosaic_L{target_level}.vrt"
+        )
+        tiles_out = str(dop_root / f"level_{target_level}" / "tiles")
         tile_vrt_lod(level_vrt, tiles_out, chunk_px)
 
     print("\nGenerating DEM images...")
