@@ -27,6 +27,7 @@ export class TerrainMetadataParser {
                     data["bbox_lv95_world_space_grid_alligned"]?.[3] || 0
                 )
             ),
+            centerWorldSpace: new THREE.Vector2(),
             minElevation: data["min_elevation"] || 0.0,
             maxElevation: data["max_elevation"] || 0.0,
             meanElevation: data["mean_elevation"] || 0.0,
@@ -36,6 +37,10 @@ export class TerrainMetadataParser {
 
         terrainLevelMetadata.bboxWorldSpace.min.multiplyScalar(App.instance.renderScale)
         terrainLevelMetadata.bboxWorldSpace.max.multiplyScalar(App.instance.renderScale)
+        const center = new THREE.Vector2()
+        terrainLevelMetadata.bboxWorldSpace.getCenter(center)
+        center.y = -center.y // Invert Y axis because of coordinate sytem differences betwen LV95 and Three.js
+        terrainLevelMetadata.centerWorldSpace = center
 
         return terrainLevelMetadata
     }

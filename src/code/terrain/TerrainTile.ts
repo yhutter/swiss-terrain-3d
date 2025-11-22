@@ -23,6 +23,10 @@ export class TerrainTile {
         return this._params.demTexture
     }
 
+    get id(): string {
+        return this._params.id
+    }
+
     set useDemTexture(value: boolean) {
         if (this._material) {
             this._material.uniforms.uUseDemTexture.value = value
@@ -55,12 +59,17 @@ export class TerrainTile {
                 uDopTexture: { value: this._params.dopTexture },
                 uTintColor: { value: randomTintColor },
                 uDemTexture: { value: this._params.demTexture },
-                uUseDemTexture: { value: true },
+                uUseDemTexture: { value: this._params.shouldUseDemTexture },
             },
             side: THREE.DoubleSide,
             wireframe: wireframe,
         })
 
         this._mesh = new THREE.Mesh(geo, this._material)
+        this._mesh.position.set(
+            this._params.xPos,
+            0,
+            this._params.zPos,
+        )
     }
 }

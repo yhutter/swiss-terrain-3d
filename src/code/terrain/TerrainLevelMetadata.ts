@@ -5,6 +5,7 @@ export type TerrainLevelMetadata = {
     demImagePath: string
     dopImagePath: string
     bboxWorldSpace: THREE.Box2
+    centerWorldSpace: THREE.Vector2
     minElevation: number
     maxElevation: number
     meanElevation: number

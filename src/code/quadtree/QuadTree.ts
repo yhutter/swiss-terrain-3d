@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { QuadTreeNode } from './QuadTreeNode';
+import { IdGenerator } from '../helpers/IdGenerator';
 
 
 export class QuadTree {
@@ -7,12 +8,18 @@ export class QuadTree {
     private _maxDepth = 1
 
     constructor(bounds: THREE.Box2, maxDepth: number = 1) {
+        const size = bounds.getSize(new THREE.Vector2());
+        const center = bounds.getCenter(new THREE.Vector2());
+        const level = 0;
+        const id = IdGenerator.generate(level, center.x, center.y)
         this._maxDepth = maxDepth;
         this._root = {
+            id: id,
             bounds: bounds,
+            level: 0,
             children: [],
-            center: bounds.getCenter(new THREE.Vector2()),
-            size: bounds.getSize(new THREE.Vector2()),
+            center: center,
+            size: size,
         }
     }
 
@@ -30,19 +37,9 @@ export class QuadTree {
     }
 
     insertPosition(position: THREE.Vector2): void {
-        this.clearChildren()
+        // Clear existing children
+        this._root.children = []
         this.insertPositionRecursive(this._root, position.clone(), 0);
-    }
-
-    private clearChildren(): void {
-        this.clearChildrenRecursive(this._root);
-    }
-
-    private clearChildrenRecursive(node: QuadTreeNode): void {
-        node.children = [];
-        for (const child of node.children) {
-            this.clearChildrenRecursive(child);
-        }
     }
 
     private getBoundsRecursive(node: QuadTreeNode): THREE.Box2[] {
@@ -87,12 +84,21 @@ export class QuadTree {
 
         const quadtrants = [bottomLeft, bottomRight, topLeft, topRight];
 
-        const children: QuadTreeNode[] = quadtrants.map(bounds => ({
-            bounds: bounds,
-            children: [],
-            center: bounds.getCenter(new THREE.Vector2()),
-            size: bounds.getSize(new THREE.Vector2()),
-        }));
+        const children: QuadTreeNode[] = quadtrants.map((bounds) => {
+            const center = bounds.getCenter(new THREE.Vector2());
+            const size = bounds.getSize(new THREE.Vector2());
+            const level = node.level + 1;
+            const id = IdGenerator.generate(level, center.x, center.y);
+            const child = {
+                id: id,
+                bounds: bounds,
+                level: level,
+                children: [],
+                center: center,
+                size: size,
+            }
+            return child
+        });
 
         return children;
     }

@@ -170,7 +170,7 @@ export class App {
 
     private async setupTerrain(): Promise<void> {
         this._terrain = new Terrain()
-        await this._terrain.loadTerrain(this._terrainMetadataPath)
+        await this._terrain.initialize(this._terrainMetadataPath)
     }
 
     private async setupHDREnvironment(): Promise<void> {
@@ -182,11 +182,11 @@ export class App {
     private toggleQuadTreeVisualization(enabled: boolean): void {
         if (enabled) {
             this._quadTreeHelper!.visible = true
-            this._terrain!.shouldUseDemTexture(false)
+            this._terrain!.shouldUseDemTexture = false
         }
         else {
             this._quadTreeHelper!.visible = false
-            this._terrain!.shouldUseDemTexture(true)
+            this._terrain!.shouldUseDemTexture = true
         }
     }
 
@@ -229,20 +229,20 @@ export class App {
         this._cameraQuadTreeVisualization.updateProjectionMatrix()
     }
 
-    private update(): void {
+    private update() {
         const dt = this._clock.getDelta()
         this._orbitControls.update()
-        this._terrain?.update(dt)
         this._player?.update(dt)
         this._quadTree?.insertPosition(this._player!.position2D)
         this._quadTreeHelper?.update()
+        this._terrain?.update(dt, this._quadTree!.getChildren())
 
         // Track player position
         this._cameraQuadTreeVisualization.position.x = this._player!.position.x
         this._cameraQuadTreeVisualization.position.z = this._player!.position.z
     }
 
-    private render(): void {
+    private render() {
         this.update()
         const camera = this._tweaks.enableQuadTreeVisualization ? this._cameraQuadTreeVisualization : this._camera
         this._renderer.render(this._scene, camera)
