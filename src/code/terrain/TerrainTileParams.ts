@@ -10,4 +10,6 @@ export type TerrainTileParams = {
     demTexture: THREE.Texture
     wireframe: boolean,
     shouldUseDemTexture: boolean,
+    minHeightScale: number,
+    maxHeightScale: number,
 }

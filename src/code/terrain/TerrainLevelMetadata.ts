@@ -10,5 +10,7 @@ export type TerrainLevelMetadata = {
     maxElevation: number
     meanElevation: number
     tileX: number
-    tileY: number
+    tileY: number,
+    globalMinElevation: number,
+    globalMaxElevation: number,
 }

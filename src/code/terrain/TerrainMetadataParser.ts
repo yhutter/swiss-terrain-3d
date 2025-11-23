@@ -33,6 +33,8 @@ export class TerrainMetadataParser {
             meanElevation: data["mean_elevation"] || 0.0,
             tileX: data["tile_x"] || 0,
             tileY: data["tile_y"] || 0,
+            globalMinElevation: data["global_min_elev"] || 0.0,
+            globalMaxElevation: data["global_max_elev"] || 0.0,
         }
 
         terrainLevelMetadata.bboxWorldSpace.min.multiplyScalar(App.instance.renderScale)
@@ -41,6 +43,13 @@ export class TerrainMetadataParser {
         terrainLevelMetadata.bboxWorldSpace.getCenter(center)
         center.y = -center.y // Invert Y axis because of coordinate sytem differences betwen LV95 and Three.js
         terrainLevelMetadata.centerWorldSpace = center
+
+        terrainLevelMetadata.globalMinElevation *= App.instance.renderScale
+        terrainLevelMetadata.globalMaxElevation *= App.instance.renderScale
+
+        // TODO: Check if flooring is necessary
+        terrainLevelMetadata.globalMinElevation = Math.floor(terrainLevelMetadata.globalMinElevation)
+        terrainLevelMetadata.globalMaxElevation = Math.floor(terrainLevelMetadata.globalMaxElevation)
 
         return terrainLevelMetadata
     }

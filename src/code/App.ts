@@ -8,7 +8,8 @@ import { QuadTree } from "./quadtree/QuadTree"
 import { QuadTreeHelper } from "./quadtree/QuadTreeHelper"
 
 export class App {
-    private _terrainMetadataPath = "/static/data/output_tiles-chur/terrain_metadata.json"
+    // TODO: Make these paths selectable via dropdown in Tweakpane
+    private _terrainMetadataPath = "/static/data/output_tiles-sargans/terrain_metadata.json"
     private _envMapPath = "/static/maps/envmap-1k.hdr"
 
     // We receive the units in meters (for example 1000 meters). To have a more manageable scale in the 3D scene, we apply a render scale of 0.001 so that 1000 meters becomes 1 unit in the 3D scene.

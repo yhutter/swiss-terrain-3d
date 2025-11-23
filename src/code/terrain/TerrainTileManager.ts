@@ -53,7 +53,9 @@ export class TerrainTileManager {
             anisotropy,
             resolution,
             wireframe,
-            shouldUseDemTexture
+            shouldUseDemTexture,
+            terrainTileInfo.globalMinElevation,
+            terrainTileInfo.globalMaxElevation,
         );
         this._terrainTileCache.set(tileId, tile);
 
@@ -91,6 +93,8 @@ export class TerrainTileManager {
         resolution: number,
         wireframe: boolean,
         useDemTexture: boolean,
+        minHeightScale: number,
+        maxHeightScale: number,
     ): Promise<TerrainTile> {
         const dopTexture = await App.instance.textureLoader.loadAsync(dopImagePath)
         dopTexture.colorSpace = THREE.SRGBColorSpace
@@ -115,6 +119,8 @@ export class TerrainTileManager {
             demTexture: demTexture,
             wireframe: wireframe,
             shouldUseDemTexture: useDemTexture,
+            minHeightScale: minHeightScale,
+            maxHeightScale: maxHeightScale,
         }
         return new TerrainTile(terrainTileParams)
     }

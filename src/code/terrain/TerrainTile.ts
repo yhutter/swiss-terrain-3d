@@ -71,6 +71,8 @@ export class TerrainTile {
                 uTintColor: { value: randomTintColor },
                 uDemTexture: { value: this._params.demTexture },
                 uUseDemTexture: { value: this._params.shouldUseDemTexture },
+                uHeightScaleMin: { value: this._params.minHeightScale },
+                uHeightScaleMax: { value: this._params.maxHeightScale }
             },
             side: THREE.DoubleSide,
             wireframe: wireframe,
