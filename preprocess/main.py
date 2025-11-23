@@ -455,7 +455,13 @@ def get_tile_metadata(tile_path: Path):
 
 
 def collect_level_metadata(
-    dem_root: Path, dop_root: Path, levels: int, chunk_px, center
+    dem_root: Path,
+    dop_root: Path,
+    levels: int,
+    chunk_px,
+    center,
+    global_min,
+    global_max,
 ):
     metadata = []
     cx, cy = center
@@ -526,6 +532,8 @@ def collect_level_metadata(
                 "bbox_lv95_grid_alligned": bbox_lv95_grid_alligned,
                 "bbox_lv95_world_space": bbox_lv95_world_space,
                 "bbox_lv95_world_space_grid_alligned": bbox_lv95_world_space_grid_alligned,
+                "global_min_elev": global_min,
+                "global_max_elev": global_max,
                 "size_px": info["size"],
                 "min_elev": info["min"],
                 "max_elev": info["max"],
@@ -640,11 +648,11 @@ def preprocess(dem_input: str, dop_input: str, out_dir: str, chunk_px: int):
         tiles_out = str(dop_root / f"level_{target_level}" / "tiles")
         tile_vrt_lod(level_vrt, tiles_out, chunk_px)
 
+    # Figure out global min/max for DEM scaling (needed in ThreeJS Shader and saved as metadata).
+    global_min, global_max = compute_global_minmax(dem_crop)
     print("\nGenerating DEM images...")
     for L in range(levels):
         dem_tiles = list((dem_root / f"level_{L}" / "tiles").glob("*.tif"))
-        level_vrt = str(dem_root / f"level_{L}" / f"mosaic_L{L}.vrt")
-        global_min, global_max = compute_global_minmax(level_vrt)
 
         for dem_tile in dem_tiles:
             height_map_path = dem_tile.parent / f"{dem_tile.name}.png"
@@ -666,7 +674,7 @@ def preprocess(dem_input: str, dop_input: str, out_dir: str, chunk_px: int):
     # Metadata
     print("\nWrite tile metadata...")
     level_metadata = collect_level_metadata(
-        dem_root, dop_root, levels, chunk_px, bbox_lv95_center
+        dem_root, dop_root, levels, chunk_px, bbox_lv95_center, global_min, global_max
     )
     metadata = {
         "bbox_lv95": bbox_lv95,
