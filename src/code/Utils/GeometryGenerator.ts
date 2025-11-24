@@ -1,6 +1,6 @@
 import * as THREE from "three"
 
-export class GeometryHelper {
+export class GeometryGenerator {
 
     static createRegularGridGeometry(resolution: number, size: number): THREE.BufferGeometry {
         const positions: number[] = [];
@@ -26,10 +26,10 @@ export class GeometryHelper {
         // Generate alternating diagonal pattern
         for (let y = 0; y < resolution; y++) {
             for (let x = 0; x < resolution; x++) {
-                const a = GeometryHelper.getIndexForGrid(x, y, resolution);
-                const b = GeometryHelper.getIndexForGrid(x + 1, y, resolution);
-                const c = GeometryHelper.getIndexForGrid(x, y + 1, resolution);
-                const d = GeometryHelper.getIndexForGrid(x + 1, y + 1, resolution);
+                const a = GeometryGenerator.getIndexForGrid(x, y, resolution);
+                const b = GeometryGenerator.getIndexForGrid(x + 1, y, resolution);
+                const c = GeometryGenerator.getIndexForGrid(x, y + 1, resolution);
+                const d = GeometryGenerator.getIndexForGrid(x + 1, y + 1, resolution);
 
                 // Alternate the diagonal based on the sum of x and y
                 if ((x + y) % 2 === 0) {

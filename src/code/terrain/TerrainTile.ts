@@ -4,7 +4,7 @@ import fragmentShader from '../../static/shaders/terrain.frag.glsl'
 import CustomShaderMaterial from "three-custom-shader-material/vanilla";
 
 import { TerrainTileParams } from './TerrainTileParams';
-import { GeometryHelper } from '../helpers/GeometryHelper';
+import { GeometryGenerator } from '../Utils/GeometryGenerator';
 
 export class TerrainTile {
     _mesh: THREE.Mesh | null = null
@@ -54,7 +54,7 @@ export class TerrainTile {
         const wireframe = this._params.wireframe
         const size = this._params.size
 
-        const geo = GeometryHelper.createRegularGridGeometry(
+        const geo = GeometryGenerator.createRegularGridGeometry(
             resolution,
             size
         )

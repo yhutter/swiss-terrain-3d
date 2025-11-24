@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { QuadTreeNode } from './QuadTreeNode';
-import { IdGenerator } from '../helpers/IdGenerator';
+import { IdGenerator } from '../Utils/IdGenerator';
 
 
 export class QuadTree {

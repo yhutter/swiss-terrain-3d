@@ -3,7 +3,7 @@ import { App } from '../App';
 import { TerrainTile } from "./TerrainTile";
 import { TerrainMetadata } from "./TerrainMetadata";
 import { TerrainTileManager } from "./TerrainTileManager";
-import { QuadTreeNode } from "../quadtree/QuadTreeNode";
+import { QuadTreeNode } from "../QuadTree/QuadTreeNode";
 
 export class Terrain extends THREE.Group {
     private _tweaks = {
@@ -58,6 +58,10 @@ export class Terrain extends THREE.Group {
         await TerrainTileManager.initializeFromMetadata(metadataPath)
         this._metadata = TerrainTileManager.terrainMetadata!
         App.instance.scene.add(this)
+    }
+
+    onResize(sizes: { width: number; height: number }): void {
+        // No implementation needed for terrain on resize
     }
 
     update(dt: number, quadTreeNodes: QuadTreeNode[]) {

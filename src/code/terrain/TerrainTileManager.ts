@@ -5,7 +5,7 @@ import { TerrainMetadataParser } from "./TerrainMetadataParser";
 import { TerrainLevelMetadata } from "./TerrainLevelMetadata";
 import { TerrainTile } from "./TerrainTile";
 import { TerrainTileParams } from "./TerrainTileParams";
-import { QuadTreeNode } from "../quadtree/QuadTreeNode";
+import { QuadTreeNode } from "../QuadTree/QuadTreeNode";
 
 export class TerrainTileManager {
 

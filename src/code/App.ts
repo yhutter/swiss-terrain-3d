@@ -1,11 +1,11 @@
 import { HDRLoader, OrbitControls } from "three/examples/jsm/Addons.js"
 import * as THREE from "three"
 import { Pane, FolderApi } from "tweakpane"
-import { Terrain } from "./terrain/Terrain"
+import { Terrain } from "./Terrain/Terrain"
 import { Player } from "./Player"
-import { InputHandler } from "./helpers/InputHandler"
-import { QuadTree } from "./quadtree/QuadTree"
-import { QuadTreeHelper } from "./quadtree/QuadTreeHelper"
+import { InputHandler } from "./Utils/InputHandler"
+import { QuadTree } from "./QuadTree/QuadTree"
+import { QuadTreeHelper } from "./QuadTree/QuadTreeHelper"
 
 export class App {
     // TODO: Make these paths selectable via dropdown in Tweakpane
@@ -43,7 +43,7 @@ export class App {
             "Reinhard": THREE.ReinhardToneMapping,
         },
         toneMapping: THREE.NoToneMapping,
-        enableQuadTreeVisualization: true,
+        enableQuadTreeVisualization: false,
     }
 
     private _terrain: Terrain | null = null
