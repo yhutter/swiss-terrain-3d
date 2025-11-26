@@ -147,7 +147,9 @@ export class Terrain extends THREE.Group {
             const foundNode = quadTreeNodes.find(node => node.id === tile.id)
             if (!foundNode) {
                 // Remove tile
-                this.remove(tile.mesh)
+                if (tile.mesh) {
+                    this.remove(tile.mesh)
+                }
                 const tileIndex = this._terrainTiles.indexOf(tile)
                 this._terrainTiles.splice(tileIndex, 1)
                 tile.dispose()
@@ -157,7 +159,6 @@ export class Terrain extends THREE.Group {
         for (const node of quadTreeNodes) {
             const foundExistingTile = this._terrainTiles.find(tile => tile.id === node.id)
             if (foundExistingTile) {
-                foundExistingTile.useDemTexture = this._shouldUseDemTexture
                 continue
             }
             TerrainTileManager.requestTerrainTileForNode(node, this._tweaks.anisotropy, resolution, this._tweaks.wireframe, this._shouldUseDemTexture).then((tile) => {
@@ -166,8 +167,9 @@ export class Terrain extends THREE.Group {
                     return
                 }
                 this._terrainTiles.push(tile)
-                // TODO: Fix this warning here
-                this.add(tile.mesh)
+                if (tile.mesh) {
+                    this.add(tile.mesh)
+                }
             })
         }
     }

@@ -5,54 +5,42 @@ import CustomShaderMaterial from "three-custom-shader-material/vanilla";
 
 import { TerrainTileParams } from './TerrainTileParams';
 import { GeometryGenerator } from '../Utils/GeometryGenerator';
+import { App } from '../App';
 
 export class TerrainTile {
-    _mesh: THREE.Mesh | null = null
-    _material: CustomShaderMaterial | null = null
-    _params: TerrainTileParams
+    id: string
+    mesh: THREE.Mesh | null = null
+    material: CustomShaderMaterial | null = null
+    demTexture: THREE.Texture | null = null
+    dopTexture: THREE.Texture | null = null
 
-    get mesh(): THREE.Mesh | null {
-        return this._mesh
-    }
-
-    get material(): CustomShaderMaterial | null {
-        return this._material
-    }
-
-    get demTexture(): THREE.Texture {
-        return this._params.demTexture
-    }
-
-    get id(): string {
-        return this._params.id
-    }
 
     set useDemTexture(value: boolean) {
-        if (this._material) {
-            this._material.uniforms.uUseDemTexture.value = value
+        if (this.material) {
+            this.material.uniforms.uUseDemTexture.value = value
         }
-    }
-
-    get dopTexture(): THREE.Texture {
-        return this._params.dopTexture
     }
 
     dispose() {
-        if (this._mesh) {
-            this._mesh.geometry.dispose()
+        if (this.mesh) {
+            this.mesh.geometry.dispose()
         }
-        if (this._material) {
-            this._material.dispose()
+        if (this.material) {
+            this.material.dispose()
         }
-        this._params.dopTexture.dispose()
-        this._params.demTexture.dispose()
+        if (this.demTexture) {
+            this.demTexture.dispose()
+        }
+        if (this.dopTexture) {
+            this.dopTexture.dispose()
+        }
     }
 
-    constructor(params: TerrainTileParams) {
-        this._params = params
-        const resolution = this._params.resolution
-        const wireframe = this._params.wireframe
-        const size = this._params.size
+    static async createFromParams(params: TerrainTileParams): Promise<TerrainTile> {
+        const terrainTile = new TerrainTile(params.id)
+        const resolution = params.resolution
+        const wireframe = params.wireframe
+        const size = params.size
 
         const geo = GeometryGenerator.createRegularGridGeometry(
             resolution,
@@ -62,27 +50,50 @@ export class TerrainTile {
 
         const randomTintColor = new THREE.Color(Math.random(), Math.random(), Math.random())
 
-        this._material = new CustomShaderMaterial({
+        const dopTexture = await App.instance.textureLoader.loadAsync(params.dopTexturePath)
+        dopTexture.colorSpace = THREE.SRGBColorSpace
+        dopTexture.wrapS = THREE.ClampToEdgeWrapping
+        dopTexture.wrapT = THREE.ClampToEdgeWrapping
+        dopTexture.generateMipmaps = true
+        dopTexture.anisotropy = params.anistropy
+        terrainTile.dopTexture = dopTexture
+
+
+        const demTexture = await App.instance.textureLoader.loadAsync(params.demTexturePath)
+        demTexture.wrapS = THREE.ClampToEdgeWrapping
+        demTexture.wrapT = THREE.ClampToEdgeWrapping
+        demTexture.generateMipmaps = true
+        demTexture.minFilter = THREE.LinearFilter
+        demTexture.magFilter = THREE.LinearFilter
+        terrainTile.demTexture = demTexture
+
+
+        terrainTile.material = new CustomShaderMaterial({
             baseMaterial: THREE.MeshStandardMaterial,
             vertexShader: vertexShader,
             fragmentShader: fragmentShader,
             uniforms: {
-                uDopTexture: { value: this._params.dopTexture },
+                uDopTexture: { value: terrainTile.dopTexture },
                 uTintColor: { value: randomTintColor },
-                uDemTexture: { value: this._params.demTexture },
-                uUseDemTexture: { value: this._params.shouldUseDemTexture },
-                uHeightScaleMin: { value: this._params.minHeightScale },
-                uHeightScaleMax: { value: this._params.maxHeightScale }
+                uDemTexture: { value: terrainTile.demTexture },
+                uUseDemTexture: { value: params.shouldUseDemTexture },
+                uHeightScaleMin: { value: params.minHeightScale },
+                uHeightScaleMax: { value: params.maxHeightScale }
             },
             side: THREE.DoubleSide,
             wireframe: wireframe,
         })
 
-        this._mesh = new THREE.Mesh(geo, this._material)
-        this._mesh.position.set(
-            this._params.xPos,
+        terrainTile.mesh = new THREE.Mesh(geo, terrainTile.material)
+        terrainTile.mesh.position.set(
+            params.xPos,
             0,
-            this._params.zPos,
+            params.zPos,
         )
+        return terrainTile
+    }
+
+    constructor(id: string) {
+        this.id = id
     }
 }
