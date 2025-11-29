@@ -7,6 +7,10 @@ export class Player {
     private _size = 0.04
     private _mesh: THREE.Mesh
 
+    get mesh(): THREE.Mesh {
+        return this._mesh
+    }
+
     get position(): THREE.Vector3 {
         return this._position
     }
@@ -21,7 +25,6 @@ export class Player {
         const geometry = new THREE.SphereGeometry(this._size, 16, 16)
         this._mesh = new THREE.Mesh(geometry, material)
         this._mesh.position.copy(this._position)
-        App.instance.scene.add(this._mesh)
     }
 
     update(dt: number): void {

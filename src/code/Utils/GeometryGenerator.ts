@@ -1,55 +1,422 @@
 import * as THREE from "three"
+import { IndexStitchingMode } from "./IndexStitchingMode";
 
 export class GeometryGenerator {
+
+    private static _indexBuffersForStitchingModes: Map<IndexStitchingMode, THREE.BufferAttribute> = new Map();
+
+    static intitializeIndexBufferForStitchingModes(size: number) {
+        for (const modeKey in IndexStitchingMode) {
+            const mode = Number(modeKey) as IndexStitchingMode;
+            if (!isNaN(mode)) {
+                const indices = GeometryGenerator.generateIndexBufferForStitchingMode(mode, size);
+                const indexAttribute = new THREE.BufferAttribute(new Uint32Array(indices), 1);
+                GeometryGenerator._indexBuffersForStitchingModes.set(mode, indexAttribute);
+            }
+        }
+    }
+
+    static getIndexBufferForStitchingMode(mode: IndexStitchingMode): THREE.BufferAttribute | undefined {
+        return GeometryGenerator._indexBuffersForStitchingModes.get(mode);
+    }
 
     static createRegularGridGeometry(resolution: number, size: number): THREE.BufferGeometry {
         const positions: number[] = [];
         const indices: number[] = [];
         const uvs: number[] = [];
 
-        const step = size / resolution;
+        const halfSize = size / 2;
 
-        // Generate vertex positions & UVs
-        for (let y = 0; y <= resolution; y++) {
-            for (let x = 0; x <= resolution; x++) {
-                const posX = x * step - size / 2;
-                const posY = y * step - size / 2;
-                const posZ = 0
-                positions.push(posX, posY, posZ)
+        // We subdivide each "logical" quad into a 2x2 grid:
+        const gridRes = resolution * 2;
+        const step = size / gridRes;
 
-                const uvX = x / resolution;
-                const uvY = y / resolution;
-                uvs.push(uvX, uvY);
+
+        // Generate vertex positions + UVs on a uniform grid
+        for (let y = 0; y <= gridRes; y++) {
+            for (let x = 0; x <= gridRes; x++) {
+                const posX = x * step - halfSize;
+                const posY = y * step - halfSize;
+                const posZ = 0;
+                positions.push(posX, posY, posZ);
+                uvs.push(x / gridRes, y / gridRes);
             }
         }
 
-        // Generate alternating diagonal pattern
-        for (let y = 0; y < resolution; y++) {
-            for (let x = 0; x < resolution; x++) {
-                const a = GeometryGenerator.getIndexForGrid(x, y, resolution);
-                const b = GeometryGenerator.getIndexForGrid(x + 1, y, resolution);
-                const c = GeometryGenerator.getIndexForGrid(x, y + 1, resolution);
-                const d = GeometryGenerator.getIndexForGrid(x + 1, y + 1, resolution);
-
-                // Alternate the diagonal based on the sum of x and y
-                if ((x + y) % 2 === 0) {
-                    indices.push(a, b, c, b, d, c);
-                } else {
-                    indices.push(a, b, d, a, d, c);
-                }
+        for (let y = 0; y < gridRes; y += 2) {
+            for (let x = 0; x < gridRes; x += 2) {
+                const fullIndices = GeometryGenerator.generateIndexBufferForStitchingModeFull(gridRes, x, y);
+                indices.push(...fullIndices);
             }
         }
 
         const geometry = new THREE.BufferGeometry();
-        geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-        geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+        geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+        geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
         geometry.setIndex(indices);
         geometry.computeVertexNormals();
-
         return geometry;
     }
 
-    private static getIndexForGrid(x: number, y: number, resolution: number): number {
-        return y * (resolution + 1) + x;
+    private static generateIndexBufferForStitchingModeNorthEdge(gridRes: number, x: number, y: number): number[] {
+        //   g ---- f ---- e
+        //   | \          /|
+        //   |   \      /  |
+        //   |     \  /    |
+        //   h ---- i ---- d
+        //   |    / | \    |
+        //   |  /   |  \   |
+        //   |/     |    \ |
+        //   a ---- b ---- c
+        const idx = (x: number, y: number) => y * (gridRes + 1) + x;
+        const a = idx(x, y);
+        const b = idx(x + 1, y);
+        const c = idx(x + 2, y);
+
+        const h = idx(x, y + 1);
+        const i = idx(x + 1, y + 1);
+        const d = idx(x + 2, y + 1);
+
+        const g = idx(x, y + 2);
+        const f = idx(x + 1, y + 2);
+        const e = idx(x + 2, y + 2);
+        const indices: number[] = [];
+
+        indices.push(a, b, i);
+        indices.push(b, c, i);
+        indices.push(c, d, i);
+        indices.push(d, e, i);
+        indices.push(e, g, i);
+        indices.push(g, h, i);
+        indices.push(h, a, i);
+        return indices;
+    }
+
+    private static generateIndexBufferForStitchingModeWestEdge(gridRes: number, x: number, y: number): number[] {
+        //   g ---- f ---- e
+        //   | \    |     /|
+        //   |   \  |   /  |
+        //   |     \| /    |
+        //   h      i ---- d
+        //   |    / | \    |
+        //   |  /   |  \   |
+        //   |/     |    \ |
+        //   a ---- b ---- c
+        const idx = (x: number, y: number) => y * (gridRes + 1) + x;
+        const a = idx(x, y);
+        const b = idx(x + 1, y);
+        const c = idx(x + 2, y);
+
+        const h = idx(x, y + 1);
+        const i = idx(x + 1, y + 1);
+        const d = idx(x + 2, y + 1);
+
+        const g = idx(x, y + 2);
+        const f = idx(x + 1, y + 2);
+        const e = idx(x + 2, y + 2);
+        const indices: number[] = [];
+        indices.push(a, b, i);
+        indices.push(b, c, i);
+        indices.push(c, d, i);
+        indices.push(d, e, i);
+        indices.push(e, f, i);
+        indices.push(f, g, i);
+        indices.push(g, a, i);
+
+        return indices;
+    }
+
+    private static generateIndexBufferForStitchingModeEastEdge(gridRes: number, x: number, y: number): number[] {
+        //   g ---- f ---- e
+        //   | \    |     /|
+        //   |   \  |   /  |
+        //   |     \| /    |
+        //   h ---- i      d
+        //   |    / | \    |
+        //   |  /   |  \   |
+        //   |/     |    \ |
+        //   a ---- b ---- c
+        const idx = (x: number, y: number) => y * (gridRes + 1) + x;
+        const a = idx(x, y);
+        const b = idx(x + 1, y);
+        const c = idx(x + 2, y);
+
+        const h = idx(x, y + 1);
+        const i = idx(x + 1, y + 1);
+        const d = idx(x + 2, y + 1);
+
+        const g = idx(x, y + 2);
+        const f = idx(x + 1, y + 2);
+        const e = idx(x + 2, y + 2);
+        const indices: number[] = [];
+
+        indices.push(a, b, i);
+        indices.push(b, c, i);
+        indices.push(c, e, i);
+        indices.push(e, f, i);
+        indices.push(f, g, i);
+        indices.push(g, h, i);
+        indices.push(h, a, i);
+        return indices;
+    }
+
+    private static generateIndexBufferForStitchingModeSouthEdge(gridRes: number, x: number, y: number): number[] {
+        //   g ---- f ---- e
+        //   | \    |     /|
+        //   |   \  |   /  |
+        //   |     \| /    |
+        //   h ---- i ---- d
+        //   |    /   \    |
+        //   |  /      \   |
+        //   |/          \ |
+        //   a ---- b ---- c
+        const idx = (x: number, y: number) => y * (gridRes + 1) + x;
+        const a = idx(x, y);
+        const b = idx(x + 1, y);
+        const c = idx(x + 2, y);
+
+        const h = idx(x, y + 1);
+        const i = idx(x + 1, y + 1);
+        const d = idx(x + 2, y + 1);
+
+        const g = idx(x, y + 2);
+        const f = idx(x + 1, y + 2);
+        const e = idx(x + 2, y + 2);
+        const indices: number[] = [];
+
+        indices.push(a, c, i);
+        indices.push(c, d, i);
+        indices.push(d, e, i);
+        indices.push(e, f, i);
+        indices.push(f, g, i);
+        indices.push(g, h, i);
+        indices.push(h, a, i);
+        return indices;
+    }
+
+    private static generateIndexBufferForStitchingModeNorthWestCorner(gridRes: number, x: number, y: number): number[] {
+        //   g ---- f ---- e
+        //   | \          /|
+        //   |   \      /  |
+        //   |     \  /    |
+        //   h      i ---- d
+        //   |    / | \    |
+        //   |  /   |  \   |
+        //   |/     |    \ |
+        //   a ---- b ---- c
+        const idx = (x: number, y: number) => y * (gridRes + 1) + x;
+        const a = idx(x, y);
+        const b = idx(x + 1, y);
+        const c = idx(x + 2, y);
+
+        const h = idx(x, y + 1);
+        const i = idx(x + 1, y + 1);
+        const d = idx(x + 2, y + 1);
+
+        const g = idx(x, y + 2);
+        const f = idx(x + 1, y + 2);
+        const e = idx(x + 2, y + 2);
+        const indices: number[] = [];
+
+        indices.push(a, b, i);
+        indices.push(b, c, i);
+        indices.push(c, d, i);
+        indices.push(d, e, i);
+        indices.push(e, g, i);
+        indices.push(g, a, i);
+        return indices;
+    }
+
+    private static generateIndexBufferForStitchingModeSouthEastCorner(gridRes: number, x: number, y: number): number[] {
+        //   g ---- f ---- e
+        //   | \    |     /|
+        //   |   \  |   /  |
+        //   |     \| /    |
+        //   h ---- i      d
+        //   |    /   \    |
+        //   |  /      \   |
+        //   |/          \ |
+        //   a ---- b ---- c
+        const idx = (x: number, y: number) => y * (gridRes + 1) + x;
+        const a = idx(x, y);
+        const b = idx(x + 1, y);
+        const c = idx(x + 2, y);
+
+        const h = idx(x, y + 1);
+        const i = idx(x + 1, y + 1);
+        const d = idx(x + 2, y + 1);
+
+        const g = idx(x, y + 2);
+        const f = idx(x + 1, y + 2);
+        const e = idx(x + 2, y + 2);
+        const indices: number[] = [];
+
+        indices.push(a, c, i);
+        indices.push(c, e, i);
+        indices.push(e, f, i);
+        indices.push(f, g, i);
+        indices.push(g, h, i);
+        indices.push(h, a, i);
+        return indices;
+    }
+
+    private static generateIndexBufferForStitchingModeSouthWestCorner(gridRes: number, x: number, y: number): number[] {
+        //   g ---- f ---- e
+        //   | \    |     /|
+        //   |   \  |   /  |
+        //   |     \| /    |
+        //   h      i ---- d
+        //   |    /   \    |
+        //   |  /      \   |
+        //   |/          \ |
+        //   a ---- b ---- c
+        const idx = (x: number, y: number) => y * (gridRes + 1) + x;
+        const a = idx(x, y);
+        const b = idx(x + 1, y);
+        const c = idx(x + 2, y);
+
+        const h = idx(x, y + 1);
+        const i = idx(x + 1, y + 1);
+        const d = idx(x + 2, y + 1);
+
+        const g = idx(x, y + 2);
+        const f = idx(x + 1, y + 2);
+        const e = idx(x + 2, y + 2);
+        const indices: number[] = [];
+
+        indices.push(a, c, i);
+        indices.push(c, d, i);
+        indices.push(d, e, i);
+        indices.push(e, f, i);
+        indices.push(f, g, i);
+        indices.push(g, a, i);
+        return indices;
+    }
+
+    private static generateIndexBufferForStitchingModeFull(gridRes: number, x: number, y: number): number[] {
+        //   g ---- f ---- e
+        //   | \    |     /|
+        //   |   \  |   /  |
+        //   |     \| /    |
+        //   h ---- i ---- d
+        //   |    / | \    |
+        //   |  /   |  \   |
+        //   |/     |    \ |
+        //   a ---- b ---- c
+        const idx = (x: number, y: number) => y * (gridRes + 1) + x;
+        const a = idx(x, y);
+        const b = idx(x + 1, y);
+        const c = idx(x + 2, y);
+
+        const h = idx(x, y + 1);
+        const i = idx(x + 1, y + 1);
+        const d = idx(x + 2, y + 1);
+
+        const g = idx(x, y + 2);
+        const f = idx(x + 1, y + 2);
+        const e = idx(x + 2, y + 2);
+        const indices: number[] = [];
+
+        indices.push(a, b, i);
+        indices.push(b, c, i);
+        indices.push(c, d, i);
+        indices.push(d, e, i);
+        indices.push(e, f, i);
+        indices.push(f, g, i);
+        indices.push(g, h, i);
+        indices.push(h, a, i);
+        return indices;
+    }
+
+    private static generateIndexBufferForStitchingModeNorthEastCorner(gridRes: number, x: number, y: number): number[] {
+        //   g ---- f ---- e
+        //   | \          /|
+        //   |   \      /  |
+        //   |     \  /    |
+        //   h ---- i      d
+        //   |    / | \    |
+        //   |  /   |  \   |
+        //   |/     |    \ |
+        //   a ---- b ---- c
+        const idx = (x: number, y: number) => y * (gridRes + 1) + x;
+        const a = idx(x, y);
+        const b = idx(x + 1, y);
+        const c = idx(x + 2, y);
+
+        const h = idx(x, y + 1);
+        const i = idx(x + 1, y + 1);
+        const d = idx(x + 2, y + 1);
+
+        const g = idx(x, y + 2);
+        const f = idx(x + 1, y + 2);
+        const e = idx(x + 2, y + 2);
+        const indices: number[] = [];
+
+        indices.push(a, b, i);
+        indices.push(b, c, i);
+        indices.push(c, e, i);
+        indices.push(e, g, i);
+        indices.push(g, h, i);
+        indices.push(h, a, i);
+        return indices;
+    }
+
+
+    private static generateIndexBufferForStitchingMode(mode: IndexStitchingMode, resolution: number): number[] {
+        const indices: number[] = [];
+
+        // We subdivide each "logical" quad into a 2x2 grid:
+        const gridRes = resolution * 2;
+
+        for (let y = 0; y < gridRes; y += 2) {
+            for (let x = 0; x < gridRes; x += 2) {
+                const stitchNorthEdge = (mode == IndexStitchingMode.North || mode == IndexStitchingMode.NorthWest || mode == IndexStitchingMode.NorthEast) && y === gridRes - 2;
+                const stitchWestEdge = (mode == IndexStitchingMode.West || mode == IndexStitchingMode.SouthWest || mode == IndexStitchingMode.NorthWest) && x === 0;
+                const stitchEastEdge = (mode == IndexStitchingMode.East || mode == IndexStitchingMode.NorthEast || mode == IndexStitchingMode.SouthEast) && x === gridRes - 2;
+                const stitchSouthEdge = (mode == IndexStitchingMode.South || mode == IndexStitchingMode.SouthWest || mode == IndexStitchingMode.SouthEast) && y === 0;
+                const stitchSouthWestCorner = mode == IndexStitchingMode.SouthWest && x === 0 && y === 0;
+                const stitchSouthEastCorner = mode == IndexStitchingMode.SouthEast && x === gridRes - 2 && y === 0;
+                const stitchNorthWestCorner = mode == IndexStitchingMode.NorthWest && x === 0 && y === gridRes - 2;
+                const stitchNorthEastCorner = mode == IndexStitchingMode.NorthEast && x === gridRes - 2 && y === gridRes - 2;
+                if (stitchSouthWestCorner) {
+                    const southWestCornerIndices = GeometryGenerator.generateIndexBufferForStitchingModeSouthWestCorner(gridRes, x, y);
+                    indices.push(...southWestCornerIndices);
+                }
+                else if (stitchNorthEastCorner) {
+                    const northEastCornerIndices = GeometryGenerator.generateIndexBufferForStitchingModeNorthEastCorner(gridRes, x, y);
+                    indices.push(...northEastCornerIndices);
+                }
+                else if (stitchNorthWestCorner) {
+                    const northWestCornerIndices = GeometryGenerator.generateIndexBufferForStitchingModeNorthWestCorner(gridRes, x, y);
+                    indices.push(...northWestCornerIndices);
+                }
+                else if (stitchSouthEastCorner) {
+                    const southEastCornerIndices = GeometryGenerator.generateIndexBufferForStitchingModeSouthEastCorner(gridRes, x, y);
+                    indices.push(...southEastCornerIndices);
+                }
+                else if (stitchNorthEdge) {
+                    const northEdgeIndices = GeometryGenerator.generateIndexBufferForStitchingModeNorthEdge(gridRes, x, y);
+                    indices.push(...northEdgeIndices);
+                }
+                else if (stitchWestEdge) {
+                    const westEdgeIndices = GeometryGenerator.generateIndexBufferForStitchingModeWestEdge(gridRes, x, y);
+                    indices.push(...westEdgeIndices);
+                }
+                else if (stitchEastEdge) {
+                    const eastEdgeIndices = GeometryGenerator.generateIndexBufferForStitchingModeEastEdge(gridRes, x, y);
+                    indices.push(...eastEdgeIndices);
+
+                }
+                else if (stitchSouthEdge) {
+                    const southEdgeIndices = GeometryGenerator.generateIndexBufferForStitchingModeSouthEdge(gridRes, x, y);
+                    indices.push(...southEdgeIndices);
+                }
+                else {
+                    const fullIndices = GeometryGenerator.generateIndexBufferForStitchingModeFull(gridRes, x, y);
+                    indices.push(...fullIndices);
+                }
+            }
+        }
+        return indices;
     }
 }

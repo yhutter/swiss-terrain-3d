@@ -7,8 +7,14 @@ import { QuadTree } from "../QuadTree/QuadTree";
 import { QuadTreeHelper } from "../QuadTree/QuadTreeHelper";
 import { Player } from '../Player';
 import { OrbitControls } from "three/examples/jsm/Addons.js"
+import { QuadTreeNode } from "../QuadTree/QuadTreeNode";
+import { GeometryGenerator } from "../Utils/GeometryGenerator";
+import { IndexStitchingMode } from "../Utils/IndexStitchingMode";
 
 export class Terrain extends THREE.Group {
+
+    private _tileSize: number = 33
+
     private _tweaks = {
         wireframe: false,
         anisotropy: 16,
@@ -88,6 +94,7 @@ export class Terrain extends THREE.Group {
     }
 
     async initialize(): Promise<void> {
+        GeometryGenerator.intitializeIndexBufferForStitchingModes(this._tileSize)
         await TerrainTileManager.initializeFromMetadata(this._terrainMetadataPath)
         this._metadata = TerrainTileManager.terrainMetadata
         if (!this._metadata) {
@@ -110,6 +117,8 @@ export class Terrain extends THREE.Group {
         )
 
         this._player = new Player(this._playerStartPosition)
+        this.add(this._player.mesh)
+
         this._cameraQuadTreeVisualization.position.x = this._playerStartPosition.x
         this._cameraQuadTreeVisualization.position.z = this._playerStartPosition.z
         this._cameraQuadTreeVisualization.rotation.x = -Math.PI / 2
@@ -129,13 +138,37 @@ export class Terrain extends THREE.Group {
 
     update(dt: number) {
         this._orbitControls.update()
+
         this._player?.update(dt)
         this._quadTree?.insertPosition(this._player!.position2D)
         this._quadTreeHelper?.update()
-
         const quadTreeNodes = this._quadTree?.getChildren() || []
-        const resolution = 33
+        this.updateFromQuadTreeNodes(quadTreeNodes)
+    }
 
+
+    // TODO: Remove this method if we are sure tile stitching is working correctly.
+    private tileStitchingPlayground() {
+        const geometryOne = GeometryGenerator.createRegularGridGeometry(this._tileSize, 1)
+
+        const materialOne = new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true })
+        const meshOne = new THREE.Mesh(geometryOne, materialOne)
+        this.add(meshOne)
+
+        const geometryTwo = GeometryGenerator.createRegularGridGeometry(this._tileSize, 0.5)
+        const indexBufferGeometryTwo = GeometryGenerator.getIndexBufferForStitchingMode(IndexStitchingMode.Full)
+        if (indexBufferGeometryTwo !== undefined) {
+            geometryTwo.setIndex(indexBufferGeometryTwo)
+        }
+
+        const materialTwo = new THREE.MeshBasicMaterial({ color: 0xff0000, wireframe: true })
+        const meshTwo = new THREE.Mesh(geometryTwo, materialTwo)
+        meshTwo.position.x = 0.75
+        meshTwo.position.y = -0.25
+        this.add(meshTwo)
+    }
+
+    private updateFromQuadTreeNodes(quadTreeNodes: QuadTreeNode[]): void {
         // Track player position
         if (this._tweaks.enableQuadTreeVisualization) {
             this._cameraQuadTreeVisualization.position.x = this._player!.position.x
@@ -161,7 +194,7 @@ export class Terrain extends THREE.Group {
             if (foundExistingTile) {
                 continue
             }
-            TerrainTileManager.requestTerrainTileForNode(node, this._tweaks.anisotropy, resolution, this._tweaks.wireframe, this._shouldUseDemTexture).then((tile) => {
+            TerrainTileManager.requestTerrainTileForNode(node, this._tweaks.anisotropy, this._tileSize, this._tweaks.wireframe, this._shouldUseDemTexture).then((tile) => {
                 if (!tile) {
                     console.error(`Terrain: Failed to get tile for node ${node.id}`)
                     return
@@ -172,15 +205,19 @@ export class Terrain extends THREE.Group {
                 }
             })
         }
+
     }
 
     private toggleQuadTreeVisualization(enabled: boolean): void {
+        if (this._quadTreeHelper === null) {
+            return
+        }
         if (enabled) {
-            this._quadTreeHelper!.visible = true
+            this._quadTreeHelper.visible = true
             this.shouldUseDemTexture = false
         }
         else {
-            this._quadTreeHelper!.visible = false
+            this._quadTreeHelper.visible = false
             this.shouldUseDemTexture = true
         }
     }
