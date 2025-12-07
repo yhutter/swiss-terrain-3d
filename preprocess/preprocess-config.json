@@ -1,7 +1,7 @@
 {
     "chur": {
         "use_patching": true,
-        "skip_download": false,
+        "skip_download": true,
         "dem_csv_path": "./data/chur/ch.swisstopo.swissalti3d.csv",
         "dop_csv_path": "./data/chur/ch.swisstopo.swissimage.csv",
         "dem_download_dir": "./data/swiss-alti3d-chur",
@@ -11,7 +11,7 @@
     },
     "sargans": {
         "use_patching": true,
-        "skip_download": false,
+        "skip_download": true,
         "dem_csv_path": "./data/sargans/ch.swisstopo.swissalti3d.csv",
         "dop_csv_path": "./data/sargans/ch.swisstopo.swissimage.csv",
         "dem_download_dir": "./data/swiss-alti3d-sargans",

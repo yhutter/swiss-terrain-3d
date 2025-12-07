@@ -539,7 +539,7 @@ def process_dop_lod_level(
     bbox_combined_texture: ((float, float), (float, float)),
     meters_to_px: float,
     chunk_px: int,
-):
+) -> str:
     # Level 0: full resolution of the combined height map
     # Each subsequent level halves the resolution
     # We skip LOD0 as at runtime because of the Quadtree structure LOD0 is not used.
@@ -588,6 +588,20 @@ def process_dop_lod_level(
                 tile_level_width_px,
                 tile_level_height_px,
             )
+    return lod_dir
+
+
+def downsample_tiles_in_lod_dir(
+    lod_dir: str, downsample_size: int, filter=Image.NEAREST
+):
+    """
+    Downsamples all tiles in the specified LOD directory to the specified downsample size using the specified filter.
+    """
+    tile_files = list(Path(lod_dir).glob("*.png"))
+    for tile_file in tile_files:
+        img = Image.open(tile_file)
+        resized_img = img.resize((downsample_size, downsample_size), filter)
+        resized_img.save(tile_file)
 
 
 def process_dem_lod_level(
@@ -827,11 +841,15 @@ def preprocess(dem_input: str, dop_input: str, out_dir: str, chunk_px: int):
         )
         # Patch borders to ensure seamless tiling (1px overlap)
         patch_dem_borders(lod_dir, 1)
+        # Important: We do NOT want to downsample DEM tiles at all — this would introduce interpolation artifacts.
 
     print(f"Generating DOP {lod_levels} LOD levels...")
     for level in range(lod_levels):
         print(f"Processing DOP LOD level {level}...")
-        process_dop_lod_level(
+        # We skip LOD0 as at runtime because of the Quadtree structure LOD0 is not used (it is the root node).
+        if level == 0:
+            continue
+        lod_dir = process_dop_lod_level(
             level,
             combined_texture_cropped_file_path,
             out_dir,
@@ -839,6 +857,8 @@ def preprocess(dem_input: str, dop_input: str, out_dir: str, chunk_px: int):
             DOP_M_TO_PX,
             chunk_px,
         )
+        # Downsample DOP tiles to chunk size in order to save space.
+        downsample_tiles_in_lod_dir(lod_dir, chunk_px, Image.BILINEAR)
 
     # Collect level metadata
     print("Generating metadata...")
