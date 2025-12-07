@@ -2,13 +2,12 @@ varying vec2 vUv;
 
 uniform sampler2D uDemTexture;
 uniform bool uUseDemTexture;
-uniform float uHeightScale;
 uniform float uHeightScaleMin;
 uniform float uHeightScaleMax;
 
 void main() {
-    vUv = uv;
     vec3 finalPosition = position;
+    vUv = uv;
     if (uUseDemTexture) {
         float normalizedHeight = texture2D(uDemTexture, uv).r;
         float height = mix(uHeightScaleMin, uHeightScaleMax, normalizedHeight);

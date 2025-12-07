@@ -4,7 +4,6 @@ Implementation of a 3D Terrain Renderer in ThreeJS based on Swisstopo Dataset
 ## :warning: Prerequisites
 Make sure you have the following installed on your system:
 - NodeJS `v16 or higher`. Can be installed from [here](https://nodejs.org/)
-- GDAL for preprocessing the terrain data. Installation instructions can be found [here](https://gdal.org/download.html).
 - Python `v3.6 or higher`. Can be installed from [here](https://www.python.org/downloads/)
 
 ## :gear: Preprocessing
@@ -17,6 +16,9 @@ pip install -r requirements.txt
 python main.py
 ```
 
+## :clap: Ressources
+- [Process GeoTIFF Files with Python](https://kipling.medium.com/using-a-geotiff-and-a-touch-of-python-to-make-topographic-images-1c1b0349551b)
+
 ## :package: Libraries
 This project uses the following libraries
 - [ThreeJS](https://threejs.org/)
@@ -25,7 +27,7 @@ This project uses the following libraries
 - [SimonDev Quadtree & LOD](https://www.youtube.com/watch?v=YO_A5w_fxRQ)
 - [SimonDev Quadtree Implementation](https://github.com/simondevyoutube/ProceduralTerrain_Part3)
 - [TweakPane](https://tweakpane.github.io/docs/)
-- [GDAL (Preprocessing)](https://gdal.org/)
+- [Python GeoTIFF Library)](https://github.com/KipCrossing/geotiff)
 
 ## :rocket: How to Run
 ```bash

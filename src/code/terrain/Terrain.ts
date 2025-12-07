@@ -4,7 +4,6 @@ import { TerrainTile } from "./TerrainTile";
 import { TerrainMetadata } from "./TerrainMetadata";
 import { TerrainTileManager } from "./TerrainTileManager";
 import { QuadTree } from "../QuadTree/QuadTree";
-import { QuadTreeHelper } from "../QuadTree/QuadTreeHelper";
 import { Player } from '../Player';
 import { OrbitControls } from "three/examples/jsm/Addons.js"
 import { QuadTreeNode } from "../QuadTree/QuadTreeNode";
@@ -22,20 +21,22 @@ export class Terrain extends THREE.Group {
     }
 
     // TODO: Make these paths selectable via dropdown in Tweakpane
-    private _terrainMetadataPath = "/static/data/output_tiles-sargans/terrain_metadata.json"
+    // private _terrainMetadataPath = "/static/data/output_tiles-sargans/metadata.json"
+    private _terrainMetadataPath = "/static/data/output_tiles-sargans/metadata.json"
 
     private _terrainTiles: TerrainTile[] = []
     private _metadata: TerrainMetadata | null = null
     private _shouldUseDemTexture: boolean = false
     private _camera: THREE.PerspectiveCamera
     private _defaultCameraPosition = new THREE.Vector3(0, 1, 2)
-    private _cameraQuadTreeVisualization: THREE.PerspectiveCamera
+    private _cameraQuadTreeVisualization: THREE.OrthographicCamera
+    private _cameraQuadTreeVisualizationFrustumSize = 5
     private _defaultQuadTreeVisualizationCameraPosition = new THREE.Vector3(0, 3, 0)
     private _player: Player | null = null
     private _playerStartPosition: THREE.Vector3 | null = null
     private _quadTree: QuadTree | null = null
-    private _quadTreeHelper: QuadTreeHelper | null = null
     private _orbitControls: OrbitControls
+    private _loadingTileIds = new Set<string>();
 
     get center(): THREE.Vector3 {
         if (!this._metadata) {
@@ -64,7 +65,7 @@ export class Terrain extends THREE.Group {
         return this._metadata.bboxWorldSpace
     }
 
-    get activeCamera(): THREE.PerspectiveCamera {
+    get activeCamera(): THREE.PerspectiveCamera | THREE.OrthographicCamera {
         if (this._tweaks.enableQuadTreeVisualization) {
             return this._cameraQuadTreeVisualization
         }
@@ -78,19 +79,20 @@ export class Terrain extends THREE.Group {
         this._camera = new THREE.PerspectiveCamera(75, aspect, 0.01, 1000)
         this._camera.position.copy(this._defaultCameraPosition)
 
-        this._cameraQuadTreeVisualization = new THREE.PerspectiveCamera(75, aspect, 0.01, 1000)
+        // this._cameraQuadTreeVisualization = new THREE.PerspectiveCamera(75, aspect, 0.01, 1000)
+        this._cameraQuadTreeVisualization = new THREE.OrthographicCamera(
+            this._cameraQuadTreeVisualizationFrustumSize * aspect / -2,
+            this._cameraQuadTreeVisualizationFrustumSize * aspect / 2,
+            this._cameraQuadTreeVisualizationFrustumSize / 2,
+            this._cameraQuadTreeVisualizationFrustumSize / -2,
+            0.01,
+            1000
+        )
         this._cameraQuadTreeVisualization.position.copy(this._defaultQuadTreeVisualizationCameraPosition)
 
         this._orbitControls = new OrbitControls(this._camera, App.instance.renderer.domElement)
         this._orbitControls.enableDamping = true
         this.setupTweaks()
-    }
-
-    set shouldUseDemTexture(shouldUse: boolean) {
-        this._shouldUseDemTexture = shouldUse
-        for (const tile of this._terrainTiles) {
-            tile.useDemTexture = shouldUse
-        }
     }
 
     async initialize(): Promise<void> {
@@ -104,9 +106,6 @@ export class Terrain extends THREE.Group {
 
         const maxDepth = this.maxLevel
         this._quadTree = new QuadTree(this.boundingBox!, maxDepth)
-
-        this._quadTreeHelper = new QuadTreeHelper(this._quadTree)
-        this.add(this._quadTreeHelper)
 
         this._camera.lookAt(this.center)
 
@@ -125,6 +124,8 @@ export class Terrain extends THREE.Group {
 
         this.toggleQuadTreeVisualization(this._tweaks.enableQuadTreeVisualization)
 
+        // this.tileStitchingPlayground()
+
         App.instance.scene.add(this)
     }
 
@@ -132,31 +133,42 @@ export class Terrain extends THREE.Group {
         this._camera.aspect = aspect
         this._camera.updateProjectionMatrix()
 
-        this._cameraQuadTreeVisualization.aspect = aspect
+        this._cameraQuadTreeVisualization.left = this._cameraQuadTreeVisualizationFrustumSize * aspect / -2
+        this._cameraQuadTreeVisualization.right = this._cameraQuadTreeVisualizationFrustumSize * aspect / 2
+        this._cameraQuadTreeVisualization.top = this._cameraQuadTreeVisualizationFrustumSize / 2
+        this._cameraQuadTreeVisualization.bottom = this._cameraQuadTreeVisualizationFrustumSize / -2
         this._cameraQuadTreeVisualization.updateProjectionMatrix()
     }
 
     update(dt: number) {
         this._orbitControls.update()
-
-        this._player?.update(dt)
-        this._quadTree?.insertPosition(this._player!.position2D)
-        this._quadTreeHelper?.update()
-        const quadTreeNodes = this._quadTree?.getChildren() || []
-        this.updateFromQuadTreeNodes(quadTreeNodes)
+        if (this._player != null) {
+            this._player.update(dt)
+        }
+        if (this._quadTree != null) {
+            const position = this._player?.position2D || new THREE.Vector2(0, 0)
+            this._quadTree.insertPosition(position)
+            const quadTreeNodes = this._quadTree.getChildren()
+            for (const node of quadTreeNodes) {
+                this._quadTree.updateStitchingModeForNode(node, quadTreeNodes)
+            }
+            this.updateFromQuadTreeNodes(quadTreeNodes)
+        }
     }
 
 
     // TODO: Remove this method if we are sure tile stitching is working correctly.
     private tileStitchingPlayground() {
         const geometryOne = GeometryGenerator.createRegularGridGeometry(this._tileSize, 1)
+        geometryOne.rotateX(-Math.PI * 0.5)
 
         const materialOne = new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true })
         const meshOne = new THREE.Mesh(geometryOne, materialOne)
         this.add(meshOne)
 
         const geometryTwo = GeometryGenerator.createRegularGridGeometry(this._tileSize, 0.5)
-        const indexBufferGeometryTwo = GeometryGenerator.getIndexBufferForStitchingMode(IndexStitchingMode.Full)
+        geometryTwo.rotateX(-Math.PI * 0.5)
+        const indexBufferGeometryTwo = GeometryGenerator.getIndexBufferForStitchingMode(IndexStitchingMode.West)
         if (indexBufferGeometryTwo !== undefined) {
             geometryTwo.setIndex(indexBufferGeometryTwo)
         }
@@ -164,7 +176,7 @@ export class Terrain extends THREE.Group {
         const materialTwo = new THREE.MeshBasicMaterial({ color: 0xff0000, wireframe: true })
         const meshTwo = new THREE.Mesh(geometryTwo, materialTwo)
         meshTwo.position.x = 0.75
-        meshTwo.position.y = -0.25
+        meshTwo.position.z = -0.25
         this.add(meshTwo)
     }
 
@@ -183,6 +195,9 @@ export class Terrain extends THREE.Group {
                 if (tile.mesh) {
                     this.remove(tile.mesh)
                 }
+                if (tile.lineMesh) {
+                    this.remove(tile.lineMesh)
+                }
                 const tileIndex = this._terrainTiles.indexOf(tile)
                 this._terrainTiles.splice(tileIndex, 1)
                 tile.dispose()
@@ -190,11 +205,19 @@ export class Terrain extends THREE.Group {
         }
 
         for (const node of quadTreeNodes) {
-            const foundExistingTile = this._terrainTiles.find(tile => tile.id === node.id)
-            if (foundExistingTile) {
+            const existingTile = this._terrainTiles.find(tile => tile.id === node.id)
+            if (existingTile) {
+                // Keep existing tile in sync with tweaks
+                existingTile.useDemTexture = this._shouldUseDemTexture
+                existingTile.onStitchingModeChanged(node.indexStitchingMode)
                 continue
             }
+            if (this._loadingTileIds.has(node.id)) {
+                continue
+            }
+            this._loadingTileIds.add(node.id);
             TerrainTileManager.requestTerrainTileForNode(node, this._tweaks.anisotropy, this._tileSize, this._tweaks.wireframe, this._shouldUseDemTexture).then((tile) => {
+                this._loadingTileIds.delete(node.id);
                 if (!tile) {
                     console.error(`Terrain: Failed to get tile for node ${node.id}`)
                     return
@@ -203,22 +226,31 @@ export class Terrain extends THREE.Group {
                 if (tile.mesh) {
                     this.add(tile.mesh)
                 }
+                if (tile.lineMesh) {
+                    this.add(tile.lineMesh)
+                }
             })
         }
 
     }
 
     private toggleQuadTreeVisualization(enabled: boolean): void {
-        if (this._quadTreeHelper === null) {
-            return
-        }
+        this._shouldUseDemTexture = !enabled
         if (enabled) {
-            this._quadTreeHelper.visible = true
-            this.shouldUseDemTexture = false
+            for (const tile of this._terrainTiles) {
+                if (tile.lineMesh) {
+                    tile.lineMesh.visible = true
+                    tile.useDemTexture = this._shouldUseDemTexture
+                }
+            }
         }
         else {
-            this._quadTreeHelper.visible = false
-            this.shouldUseDemTexture = true
+            for (const tile of this._terrainTiles) {
+                if (tile.lineMesh) {
+                    tile.lineMesh.visible = false
+                    tile.useDemTexture = this._shouldUseDemTexture
+                }
+            }
         }
     }
 
@@ -249,7 +281,6 @@ export class Terrain extends THREE.Group {
             for (const tile of this._terrainTiles) {
                 if (tile.material) {
                     tile.material.wireframe = e.value
-                    tile.material.needsUpdate = true
                 }
             }
         })

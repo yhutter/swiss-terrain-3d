@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { QuadTreeNode } from './QuadTreeNode';
 import { IdGenerator } from '../Utils/IdGenerator';
+import { IndexStitchingMode } from '../Utils/IndexStitchingMode';
 
 
 export class QuadTree {
@@ -11,16 +12,17 @@ export class QuadTree {
         const size = bounds.getSize(new THREE.Vector2());
         const center = bounds.getCenter(new THREE.Vector2());
         const level = 0;
-        const id = IdGenerator.generate(level, center.x, center.y)
         this._maxDepth = maxDepth;
         this._root = {
-            id: id,
+            id: "",
             bounds: bounds,
-            level: 0,
+            level: level,
             children: [],
             center: center,
             size: size,
+            indexStitchingMode: IndexStitchingMode.Full,
         }
+        this._root.id = this.generateIdForNode(this._root);
     }
 
     get allBounds(): THREE.Box2[] {
@@ -36,10 +38,61 @@ export class QuadTree {
         return children;
     }
 
+    updateStitchingModeForNode(node: QuadTreeNode, allNodes: QuadTreeNode[]): void {
+        let mode = IndexStitchingMode.Full;
+        for (const other of allNodes) {
+            const myBounds = node.bounds;
+            const otherBounds = other.bounds;
+
+            // Skip self
+            if (other === node) continue;
+
+            // Only stitch toward coarser tiles
+            if (other.level >= node.level) continue;
+
+            const touchesSouthEdge = myBounds.max.y === otherBounds.min.y &&
+                myBounds.min.x < otherBounds.max.x &&
+                myBounds.max.x > otherBounds.min.x;
+
+            const touchesNorthEdge = myBounds.min.y === otherBounds.max.y &&
+                myBounds.min.x < otherBounds.max.x &&
+                myBounds.max.x > otherBounds.min.x;
+
+            const touchesWestEdge = myBounds.min.x === otherBounds.max.x &&
+                myBounds.min.y < otherBounds.max.y &&
+                myBounds.max.y > otherBounds.min.y;
+
+            const touchesEastEdge = myBounds.max.x === otherBounds.min.x &&
+                myBounds.min.y < otherBounds.max.y &&
+                myBounds.max.y > otherBounds.min.y;
+
+            if (touchesSouthEdge) {
+                mode |= IndexStitchingMode.South;
+            }
+
+            else if (touchesNorthEdge) {
+                mode |= IndexStitchingMode.North;
+            }
+
+            else if (touchesWestEdge) {
+                mode |= IndexStitchingMode.West;
+            }
+
+            else if (touchesEastEdge) {
+                mode |= IndexStitchingMode.East;
+            }
+        }
+        node.indexStitchingMode = mode;
+    }
+
     insertPosition(position: THREE.Vector2): void {
         // Clear existing children
         this._root.children = []
         this.insertPositionRecursive(this._root, position.clone(), 0);
+    }
+
+    private generateIdForNode(node: QuadTreeNode): string {
+        return IdGenerator.generate(node.level, node.center.x, node.center.y);
     }
 
     private getBoundsRecursive(node: QuadTreeNode): THREE.Box2[] {
@@ -88,15 +141,16 @@ export class QuadTree {
             const center = bounds.getCenter(new THREE.Vector2());
             const size = bounds.getSize(new THREE.Vector2());
             const level = node.level + 1;
-            const id = IdGenerator.generate(level, center.x, center.y);
             const child = {
-                id: id,
+                id: "",
                 bounds: bounds,
                 level: level,
                 children: [],
                 center: center,
                 size: size,
+                indexStitchingMode: IndexStitchingMode.Full
             }
+            child.id = this.generateIdForNode(child);
             return child
         });
 

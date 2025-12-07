@@ -6,11 +6,4 @@ export type TerrainLevelMetadata = {
     dopImagePath: string
     bboxWorldSpace: THREE.Box2
     centerWorldSpace: THREE.Vector2
-    minElevation: number
-    maxElevation: number
-    meanElevation: number
-    tileX: number
-    tileY: number,
-    globalMinElevation: number,
-    globalMaxElevation: number,
 }

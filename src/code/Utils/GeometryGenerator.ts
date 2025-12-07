@@ -20,10 +20,17 @@ export class GeometryGenerator {
         return GeometryGenerator._indexBuffersForStitchingModes.get(mode);
     }
 
-    static createRegularGridGeometry(resolution: number, size: number): THREE.BufferGeometry {
+    static createRegularGridGeometry(resolution: number, size: number, indexStitchingMode = IndexStitchingMode.Full): THREE.BufferGeometry {
+        if (GeometryGenerator._indexBuffersForStitchingModes.size === 0) {
+            throw new Error("GeometryGenerator: Index buffers for stitching modes have not been initialized. Call intitializeIndexBufferForStitchingModes first.");
+        }
         const positions: number[] = [];
-        const indices: number[] = [];
         const uvs: number[] = [];
+        const indexBuffer = GeometryGenerator.getIndexBufferForStitchingMode(indexStitchingMode);
+
+        if (!indexBuffer) {
+            throw new Error(`GeometryGenerator: No index buffer found for stitching mode ${IndexStitchingMode[indexStitchingMode]}`);
+        }
 
         const halfSize = size / 2;
 
@@ -43,17 +50,10 @@ export class GeometryGenerator {
             }
         }
 
-        for (let y = 0; y < gridRes; y += 2) {
-            for (let x = 0; x < gridRes; x += 2) {
-                const fullIndices = GeometryGenerator.generateIndexBufferForStitchingModeFull(gridRes, x, y);
-                indices.push(...fullIndices);
-            }
-        }
-
         const geometry = new THREE.BufferGeometry();
         geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
         geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
-        geometry.setIndex(indices);
+        geometry.setIndex(indexBuffer);
         geometry.computeVertexNormals();
         return geometry;
     }

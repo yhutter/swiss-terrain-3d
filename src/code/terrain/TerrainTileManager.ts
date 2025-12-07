@@ -4,12 +4,11 @@ import { TerrainLevelMetadata } from "./TerrainLevelMetadata";
 import { TerrainTile } from "./TerrainTile";
 import { TerrainTileParams } from "./TerrainTileParams";
 import { QuadTreeNode } from "../QuadTree/QuadTreeNode";
-import { IdGenerator } from "../Utils/IdGenerator";
 
 export class TerrainTileManager {
 
     private static _terrainMetadata: TerrainMetadata | null = null;
-    private static _terrainTileCache: Map<string, TerrainTile> = new Map();
+    private static _terrainTileCache: TerrainTile[] = [];
 
 
     public static get terrainMetadata(): TerrainMetadata | null {
@@ -21,11 +20,16 @@ export class TerrainTileManager {
     }
 
     static async requestTerrainTileForNode(node: QuadTreeNode, anisotropy: number, resolution: number, wireframe: boolean, shouldUseDemTexture: boolean): Promise<TerrainTile | null> {
-        const tileId = IdGenerator.generate(node.level, node.center.x, node.center.y);
+
+        if (TerrainTileManager._terrainMetadata === null) {
+            console.warn("TerrainTileManager: Terrain metadata not initialized.");
+            return null;
+        }
 
         // See if we have it in the cache
-        if (this._terrainTileCache.has(tileId)) {
-            return this._terrainTileCache.get(tileId)!;
+        const existingTile = this._terrainTileCache.find(t => t.id === node.id);
+        if (existingTile) {
+            return existingTile;
         }
         if (!this._terrainMetadata) {
             console.warn("TerrainTileManager: Terrain metadata not initialized.");
@@ -34,6 +38,7 @@ export class TerrainTileManager {
 
         const terrainTileInfo = this.getTileInfoForNode(node);
         if (!terrainTileInfo) {
+            debugger
             console.error("TerrainTileManager: No tile metadata found for the given node.");
             return null;
         }
@@ -41,10 +46,12 @@ export class TerrainTileManager {
         const xPos = terrainTileInfo.centerWorldSpace.x;
         const zPos = terrainTileInfo.centerWorldSpace.y;
 
+
         const params: TerrainTileParams = {
-            id: tileId,
+            id: node.id,
             xPos: xPos,
             zPos: zPos,
+            bounds: node.bounds,
             size: node.size.x,
             anistropy: anisotropy,
             resolution: resolution,
@@ -52,12 +59,13 @@ export class TerrainTileManager {
             demTexturePath: terrainTileInfo.demImagePath,
             wireframe: wireframe,
             shouldUseDemTexture: shouldUseDemTexture,
-            minHeightScale: terrainTileInfo.globalMinElevation,
-            maxHeightScale: terrainTileInfo.globalMaxElevation,
+            minHeightScale: TerrainTileManager._terrainMetadata.globalMinElevation,
+            maxHeightScale: TerrainTileManager._terrainMetadata.globalMaxElevation,
+            stitchingMode: node.indexStitchingMode,
         };
 
         const tile = await TerrainTile.createFromParams(params);
-        this._terrainTileCache.set(tileId, tile);
+        this._terrainTileCache.push(tile);
         return tile;
     }
 

@@ -9,6 +9,7 @@ export class App {
 
     // We receive the units in meters (for example 1000 meters). To have a more manageable scale in the 3D scene, we apply a render scale of 0.001 so that 1000 meters becomes 1 unit in the 3D scene.
     private _renderScale = 0.001
+    // private _renderScale = 0.01
 
     private _renderer: THREE.WebGLRenderer
     private _scene: THREE.Scene
