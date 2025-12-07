@@ -1,18 +1,24 @@
 import os
-import math
 import shutil
 import json
 from pathlib import Path
-from osgeo import gdal
 import csv
 import requests
 import re
 from tqdm import tqdm
+from geotiff import GeoTiff
+import numpy as np
+from PIL import Image
+import math
+
 
 DOP_UPDATE_CYCLE_YEARS = 3
 DEM_UPDATE_CYCLE_YEARS = 6
 
-SRS = "EPSG:2056"  # Swiss coordinate system
+COORDINATE_SYSTEM = 2056  # Swiss coordinate system
+
+DEM_M_TO_PX = 2  # SwissALTI3D has 2m resolution
+DOP_M_TO_PX = 2  # SwissIMAGE has 2m resolution
 
 
 def create_dem_url(year: int, east: int, north: int, resolution: int = 2) -> str:
@@ -217,34 +223,184 @@ def ensure_clean_dir(path: str):
     os.makedirs(path, exist_ok=True)
 
 
-def get_raster_info(ds):
-    """
-    Returns the bounding box (minx, miny, maxx, maxy), size (width, height), and pixel size (px, py) of the given GeoTIFF file.
-    """
-    gt = ds.GetGeoTransform()
-    px = gt[1]
-    py = abs(gt[5])
-    minx, maxy = gt[0], gt[3]
-    width, height = ds.RasterXSize, ds.RasterYSize
-    maxx = minx + width * px
-    miny = maxy - height * py
-    return (minx, miny, maxx, maxy), (width, height), (px, py)
+def ensure_dir(path: Path):
+    os.makedirs(path, exist_ok=True)
 
 
-def build_vrt(input_dir: str, out_vrt: str):
+def get_width_height_px_from_bbox(bbox: tuple, meters_to_px: float) -> (int, int):
     """
-    Builds a Virtual Runtime (VRT) mosaic from all all GeoTIFF files in the input directory.
+    Calculates width and height in pixels from bounding box and meters to pixel ratio.
     """
-    files = [str(p) for p in Path(input_dir).glob("*.tif")]
-    if not files:
-        raise RuntimeError(f"No GeoTIFFs found in {input_dir}")
-    print(f"Building VRT from {len(files)} tiles → {out_vrt}")
-    gdal.BuildVRT(out_vrt, files)
+    ((upper_left_x, upper_left_y), (lower_right_x, lower_right_y)) = bbox
+    width_m = lower_right_x - upper_left_x
+    height_m = upper_left_y - lower_right_y
+    width_px = int(width_m / meters_to_px)
+    height_px = int(height_m / meters_to_px)
+    return width_px, height_px
 
 
-def decide_max_levels(width_px: int, height_px: int, chunk_px: int):
+def extract_min_max_height_from_dem(dem_file: str) -> (float, float):
     """
-    Decide the maximum number of LOD levels based on input dimensions and chunk size so that the highest level is 1x1 tile.
+    Extracts min and max height values from DEM GeoTIFF.
+    """
+    dem_geotiff = GeoTiff(dem_file, as_crs=COORDINATE_SYSTEM)
+    bbox = dem_geotiff.tif_bBox_converted
+    height_values = dem_geotiff.read_box(bbox)
+    max_height = np.amax(height_values)
+    min_height = np.amin(height_values)
+    return min_height, max_height
+
+
+def file_name_from_bbox(bbox: tuple) -> str:
+    ((upper_left_x, upper_left_y), (lower_right_x, lower_right_y)) = bbox
+    return f"{upper_left_x}-{upper_left_y}_{lower_right_x}-{lower_right_y}"
+
+
+def extract_texture_from_dop(
+    dop_file: str, out_dir_path: str
+) -> (float, float, float, float):
+    """
+    Extracts the texture from the DOP GeoTIFF and saves as RGB PNG file.
+    Returns bounding box (x and y for top left and bottom right) cooridnates.
+    """
+    dop_geotiff = GeoTiff(dop_file, as_crs=COORDINATE_SYSTEM)
+    bbox = dop_geotiff.tif_bBox_converted
+    color_values = dop_geotiff.read_box(bbox)
+
+    # Save bounding box in filename
+    upper_left_x = int(bbox[0][0])
+    upper_left_y = int(bbox[0][1])
+    lower_right_x = int(bbox[1][0])
+    lower_right_y = int(bbox[1][1])
+    bbox = ((upper_left_x, upper_left_y), (lower_right_x, lower_right_y))
+    out_file_name = f"{file_name_from_bbox(bbox)}.png"
+    out_file = out_dir_path / out_file_name
+    Image.fromarray(color_values).convert("RGB").save(out_file)
+    return bbox
+
+
+def extract_height_map_from_dem(
+    dem_file: str, out_dir_path: str, global_min_height: float, global_max_height: float
+) -> (float, float, float, float):
+    """
+    Extracts height map from DEM GeoTIFF and saves as greyscale PNG.
+    The height values are normalized according to the provided global min and max height.
+    Returns bounding box (x and y for top left and bottom right) cooridnates.
+    """
+    dem_geotiff = GeoTiff(dem_file, as_crs=COORDINATE_SYSTEM)
+    bbox = dem_geotiff.tif_bBox_converted
+    height_values = dem_geotiff.read_box(bbox)
+
+    # Normalize height values to 0-255 range based on global min and max height
+    img_array = 255 * (
+        (height_values - global_min_height) / (global_max_height - global_min_height)
+    )
+
+    # Save bounding box in filename
+    upper_left_x = int(bbox[0][0])
+    upper_left_y = int(bbox[0][1])
+    lower_right_x = int(bbox[1][0])
+    lower_right_y = int(bbox[1][1])
+    bbox = ((upper_left_x, upper_left_y), (lower_right_x, lower_right_y))
+    out_file_name = f"{file_name_from_bbox(bbox)}.png"
+    out_file = out_dir_path / out_file_name
+    Image.fromarray(img_array).convert("RGB").save(out_file)
+    return bbox
+
+
+def combine_textures(
+    textures_path: str,
+    out_file: str,
+    bbox: ((float, float), (float, float)),
+    meters_to_px: float,
+):
+    """
+    Combines multiple images into a single large image covering the specified bounding box and taking into account the meters to px ratio.
+    """
+    (
+        (global_upper_left_x, global_upper_left_y),
+        (global_lower_right_x, global_lower_right_y),
+    ) = bbox
+    width_px, height_px = get_width_height_px_from_bbox(bbox, meters_to_px)
+
+    combined_texture = np.zeros((height_px, width_px, 3), dtype=np.uint8)
+
+    texture_files = list(Path(textures_path).glob("*.png"))
+    for texture_file in texture_files:
+        m = re.match(r"(\d+)-(\d+)_(\d+)-(\d+)\.png", texture_file.name)
+        if not m:
+            continue
+        upper_left_x = int(m.group(1))
+        upper_left_y = int(m.group(2))
+
+        texture_img = Image.open(texture_file)
+        texture_pixels = np.array(texture_img)
+
+        texture_width_px = texture_pixels.shape[1]
+        texture_height_px = texture_pixels.shape[0]
+
+        x_offset = upper_left_x - global_upper_left_x
+        y_offset = global_upper_left_y - upper_left_y
+
+        y_offset_px = int(y_offset / meters_to_px)
+        x_offset_px = int(x_offset / meters_to_px)
+
+        combined_texture[
+            y_offset_px : y_offset_px + texture_height_px,
+            x_offset_px : x_offset_px + texture_width_px,
+        ] = texture_pixels
+
+    Image.fromarray(combined_texture).convert("RGB").save(out_file)
+
+
+def combine_height_maps(
+    height_maps_path: str,
+    out_file: str,
+    bbox: ((float, float), (float, float)),
+    meters_to_px: float,
+):
+    """
+    Combines multiple height map images into a single large height map covering the specified bounding box and taking into account the meters to px ratio.
+    """
+    (
+        (global_upper_left_x, global_upper_left_y),
+        (global_lower_right_x, global_lower_right_y),
+    ) = bbox
+    width_px, height_px = get_width_height_px_from_bbox(bbox, meters_to_px)
+
+    combined_height_map = np.zeros((height_px, width_px, 3), dtype=np.uint8)
+
+    height_map_files = list(Path(height_maps_path).glob("*.png"))
+    for height_map_file in height_map_files:
+        m = re.match(r"(\d+)-(\d+)_(\d+)-(\d+)\.png", height_map_file.name)
+        if not m:
+            continue
+        upper_left_x = int(m.group(1))
+        upper_left_y = int(m.group(2))
+
+        height_map_img = Image.open(height_map_file)
+        height_map_pixels = np.array(height_map_img)
+
+        height_map_width_px = height_map_pixels.shape[1]
+        height_map_height_px = height_map_pixels.shape[0]
+
+        x_offset = upper_left_x - global_upper_left_x
+        y_offset = global_upper_left_y - upper_left_y
+
+        y_offset_px = int(y_offset / meters_to_px)
+        x_offset_px = int(x_offset / meters_to_px)
+
+        combined_height_map[
+            y_offset_px : y_offset_px + height_map_height_px,
+            x_offset_px : x_offset_px + height_map_width_px,
+        ] = height_map_pixels
+
+    Image.fromarray(combined_height_map).convert("RGB").save(out_file)
+
+
+def decide_max_levels(width_px: int, height_px: int, chunk_px: int) -> int:
+    """
+    Decide the maximum number of LOD levels that the highest level is 1x1 tile.
     """
     tiles_x = width_px / chunk_px
     tiles_y = height_px / chunk_px
@@ -255,328 +411,237 @@ def decide_max_levels(width_px: int, height_px: int, chunk_px: int):
     return max_level + 1
 
 
-def crop_to_divisible_square_grid(
-    src_vrt: str, out_vrt: str, chunk_px: int, levels: int
+def get_crop_dimensions_squared(
+    levels: int, chunk_px: int, width: int, height: int
+) -> int:
+    base_multiple = chunk_px * (2 ** (levels - 1))
+    width_crop = (width // base_multiple) * base_multiple
+    height_crop = (height // base_multiple) * base_multiple
+    # Make it square by shrinking the longer dimension
+    side = min(width_crop, height_crop)
+    return side
+
+
+def crop_image_to_square(image_path: str, out_path: str, crop_size_px: int):
+    """
+    Crops the input image to a square of size crop_size_px x crop_size_px from the top-left corner.
+    """
+    img = Image.open(image_path)
+    cropped_img = img.crop((0, 0, crop_size_px, crop_size_px))
+    cropped_img.save(out_path)
+
+
+def get_pixel_region_from_bbox(
+    bbox: ((float, float), (float, float)), meters_to_px: float
+) -> (int, int, int, int):
+    """
+    Converts a bounding box in meters to pixel coordinates.
+    Returns (x_offset_px, y_offset_px, width_px, height_px)
+    """
+    ((upper_left_x, upper_left_y), (lower_right_x, lower_right_y)) = bbox
+    x_offset_m = upper_left_x
+    y_offset_m = lower_right_y
+    width_m = lower_right_x - upper_left_x
+    height_m = upper_left_y - lower_right_y
+
+    x_offset_px = int(x_offset_m / meters_to_px)
+    y_offset_px = int(y_offset_m / meters_to_px)
+    width_px = int(width_m / meters_to_px)
+    height_px = int(height_m / meters_to_px)
+
+    return x_offset_px, y_offset_px, width_px, height_px
+
+
+def extract_tile_from_image(
+    image_path: str,
+    out_path: str,
+    x_offset_px: int,
+    y_offset_px: int,
+    width_px: int,
+    height_px: int,
 ):
     """
-    Crops the input VRT so that its dimensions are cleanly divisible by the requested chunk size and levels.
+    Extracts a tile from the input image at the specified pixel offsets and size, and saves it to out_path.
     """
-    ds = gdal.Open(src_vrt)
-    (minx, miny, maxx, maxy), (W, H), (px, py) = get_raster_info(ds)
-
-    base_multiple = chunk_px * (2 ** (levels - 1))
-    W_crop = (W // base_multiple) * base_multiple
-    H_crop = (H // base_multiple) * base_multiple
-    if W_crop == 0 or H_crop == 0:
-        raise RuntimeError(
-            "Cropping removed too much — reduce levels or use larger input."
-        )
-
-    # Make it square by shrinking the longer dimension
-    side = min(W_crop, H_crop)
-    W_crop = H_crop = side
-
-    maxx_crop = minx + W_crop * px
-    miny_crop = maxy - H_crop * py
-
-    print(f"Cropping to {W_crop}×{H_crop} px for {levels} levels.")
-    gdal.Warp(
-        out_vrt,
-        ds,
-        outputBounds=(minx, miny_crop, maxx_crop, maxy),
-        dstSRS=SRS,
-        cropToCutline=False,
-        resampleAlg=RESAMPLING,
-        format="VRT",
-        dstAlpha=False,
+    img = Image.open(image_path)
+    tile_img = img.crop(
+        (x_offset_px, y_offset_px, x_offset_px + width_px, y_offset_px + height_px)
     )
-    ds = None
-    return out_vrt, (minx, miny_crop, maxx_crop, maxy)
+    tile_img.save(out_path)
 
 
-def build_vrt_lods(src_vrt: str, out_root: str, levels: int, extent):
+def patch_dem_borders(level_dir: Path, pixel_overlap: int = 1):
     """
-    Builds a vrt for each level of detail (LOD) from the source VRT inside the out_root folder.
+    Copies a 1px border from each DEM tile into its east and south neighbours,
+    so that adjacent tiles share identical edge pixels.
+    Tiles are expected to follow the naming: ULx-ULy_LRx-LRy.png
+    and to form a regular grid.
     """
-    minx, miny, maxx, maxy = extent
-    ds = gdal.Open(src_vrt)
-    _, (W, H), _ = get_raster_info(ds)
-    ds = None
+    tiles = list(level_dir.glob("*.png"))
+    if not tiles:
+        return
 
-    for L in range(levels):
-        target_level = levels - L - 1  # L0 = highest resolution
-        lvl_dir = Path(out_root) / f"level_{target_level}"
-        lvl_dir.mkdir(parents=True, exist_ok=True)
-        out_vrt = str(lvl_dir / f"mosaic_L{target_level}.vrt")
+    # First pass: load all tiles and their metadata
+    tile_map = {}  # key: (ulx, uly) -> dict(img, bbox, width_m, height_m)
+    for tile_path in tiles:
+        m = re.match(r"(\d+)-(\d+)_(\d+)-(\d+)\.png", tile_path.name)
+        if not m:
+            continue
 
-        W_out = W // (2**L)
-        H_out = H // (2**L)
+        ulx = int(m.group(1))
+        uly = int(m.group(2))
+        lrx = int(m.group(3))
+        lry = int(m.group(4))
 
-        print(f"L{target_level}: {W_out}×{H_out} px")
-        gdal.Warp(
-            out_vrt,
-            src_vrt,
-            width=W_out,
-            height=H_out,
-            outputBounds=(minx, miny, maxx, maxy),
-            resampleAlg=RESAMPLING,
-            targetAlignedPixels=False,
-            dstSRS=SRS,
-            format="VRT",
-        )
+        width_m = lrx - ulx
+        height_m = uly - lry  # note: upper_left_y > lower_right_y
+
+        img = np.array(Image.open(tile_path))  # uint8 (H, W, 3)
+
+        tile_map[(ulx, uly)] = {
+            "path": tile_path,
+            "img": img,
+            "bbox": ((ulx, uly), (lrx, lry)),
+            "width_m": width_m,
+            "height_m": height_m,
+        }
+
+    # Second pass: copy edges into east & south neighbours
+    for (ulx, uly), data in tile_map.items():
+        img = data["img"]
+        H, W, _ = img.shape
+        width_m = data["width_m"]
+        height_m = data["height_m"]
+
+        # East neighbour: same uly, ulx + width_m
+        east_key = (ulx + width_m, uly)
+        if east_key in tile_map:
+            east_img = tile_map[east_key]["img"]
+            # copy this tile's rightmost column into east tile's leftmost column
+            east_img[:, 0, :] = img[:, W - pixel_overlap, :]
+
+        # South neighbour: same ulx, uly - height_m
+        south_key = (ulx, uly - height_m)
+        if south_key in tile_map:
+            south_img = tile_map[south_key]["img"]
+            # copy this tile's bottom row into south tile's top row
+            south_img[0, :, :] = img[H - pixel_overlap, :, :]
+
+    # Final pass: save everything back
+    for data in tile_map.values():
+        Image.fromarray(data["img"]).save(data["path"])
 
 
-def tile_vrt_lod(level_vrt: str, out_dir: str, chunk_px: int):
-    """
-    Tiles the given level VRT into chunks of chunk_px size and saves them into out_dir.
-    """
-    ds = gdal.Open(level_vrt)
-    (minx, miny, maxx, maxy), (W, H), (px, py) = get_raster_info(ds)
-
-    stride = chunk_px - 1  # 1px overlap to avoid seams
-    tiles_x = 1 + max(0, (W - chunk_px) // stride)
-    tiles_y = 1 + max(0, (H - chunk_px) // stride)
-
-    Path(out_dir).mkdir(parents=True, exist_ok=True)
+def process_dop_lod_level(
+    level: int,
+    combined_texture_path: str,
+    out_dir: str,
+    bbox_combined_texture: ((float, float), (float, float)),
+    meters_to_px: float,
+    chunk_px: int,
+):
+    # Level 0: full resolution of the combined height map
+    # Each subsequent level halves the resolution
+    # We skip LOD0 as at runtime because of the Quadtree structure LOD0 is not used.
+    if level == 0:
+        return
+    scale_factor = 2**level
+    level_width_px, level_height_px = get_width_height_px_from_bbox(
+        bbox_combined_texture, meters_to_px
+    )
+    tile_level_width_px = level_width_px // scale_factor
+    tile_level_height_px = level_height_px // scale_factor
+    lod_dir = Path(out_dir) / "dop" / f"lod_{level}"
+    ensure_dir(lod_dir)
+    # We do not resize the height map in order to avoid interpolation artifacts.
+    # Instead, we extract tiles directly from the original combined height map at the appropriate offsets.
+    tiles_x = level_width_px // tile_level_width_px
+    tiles_y = level_height_px // tile_level_height_px
+    bbox_combined_texture_upper_left_x = bbox_combined_texture[0][0]
+    bbox_combined_texture_upper_left_y = bbox_combined_texture[0][1]
 
     for ty in range(tiles_y):
         for tx in range(tiles_x):
-            xoff = tx * stride
-            yoff = ty * stride
-            win_w = min(chunk_px, W - xoff)
-            win_h = min(chunk_px, H - yoff)
-
-            out_tif = Path(out_dir) / f"tile_{ty:03d}_{tx:03d}.tif"
-            gdal.Translate(
-                str(out_tif),
-                ds,
-                srcWin=[xoff, yoff, win_w, win_h],
-                resampleAlg=RESAMPLING,
-                format="GTiff",
-                creationOptions=["TILED=YES", "COMPRESS=DEFLATE"],
+            x_offset_px = tx * tile_level_width_px
+            y_offset_px = ty * tile_level_height_px
+            tile_bbox = (
+                (
+                    bbox_combined_texture_upper_left_x + x_offset_px * meters_to_px,
+                    bbox_combined_texture_upper_left_y - y_offset_px * meters_to_px,
+                ),
+                (
+                    bbox_combined_texture_upper_left_x
+                    + (x_offset_px + tile_level_width_px) * meters_to_px,
+                    bbox_combined_texture_upper_left_y
+                    - (y_offset_px + tile_level_height_px) * meters_to_px,
+                ),
             )
-    ds = None
 
+            tile_name = file_name_from_bbox(tile_bbox)
 
-def generate_empty_image(width, height, color, output_file):
-    """
-    Generates an empty RGB PNG image of the specified size and filled with the given color.
-    Note that color should be a value between 0 and 255.
-    """
-    mem_driver = gdal.GetDriverByName("MEM")
-    mem_ds = mem_driver.Create("", width, height, 1, gdal.GDT_UInt16)
-    band = mem_ds.GetRasterBand(1)
-    band.Fill(color)
-
-    # 2. Copy to disk using CreateCopy
-    png_driver = gdal.GetDriverByName("PNG")
-    png_driver.CreateCopy(output_file, mem_ds, strict=0)
-
-    mem_ds = None
-    print(f"[INFO] Created empty height map: {output_file}")
-
-
-def generate_height_map_from_tif(input_file, output_file, in_scale, out_scale, size):
-    """
-    Generates a height map from the input GeoTIFF file, scaling elevation values to the specified range.
-    """
-    ds = gdal.Open(input_file)
-    band = ds.GetRasterBand(1)
-
-    try:
-        stats = band.GetStatistics(True, True)
-    except RuntimeError:
-        stats = None
-
-    if stats is None:
-        print(f"Could not compute statistics for {input_file}")
-        print("Generating empty height map instead.")
-        ds = None
-        generate_empty_image(size, size, 0, output_file)
-        return
-
-    translate_options = gdal.TranslateOptions(
-        format="PNG",
-        outputType=gdal.GDT_UInt16,
-        scaleParams=[[in_scale[0], in_scale[1], out_scale[0], out_scale[1]]],
-    )
-
-    gdal.Translate(destName=output_file, srcDS=input_file, options=translate_options)
-
-
-def generate_image_from_tif(input_file, output_file):
-    """
-    Generates an RGB PNG image from a GeoTIFF (e.g., from SwissIMAGE tiles).
-    Only the first three bands are used for RGB.
-    """
-    ds = gdal.Open(input_file)
-    if ds is None:
-        print(f"Could not open {input_file}")
-        return
-
-    # Most SwissIMAGE files have at least 3 bands (RGB), sometimes 4 (RGB+NIR)
-    num_bands = min(ds.RasterCount, 3)
-    translate_options = gdal.TranslateOptions(
-        format="PNG",
-        outputType=gdal.GDT_Byte,
-        bandList=list(range(1, num_bands + 1)),  # Bands 1–3
-    )
-
-    gdal.Translate(destName=output_file, srcDS=ds, options=translate_options)
-    ds = None
-
-
-def get_tile_metadata(tile_path: Path):
-    ds = gdal.Open(str(tile_path))
-    band = ds.GetRasterBand(1)
-    try:
-        stats = band.GetStatistics(True, True)
-    except RuntimeError:
-        print(f"Could not compute statistics for {tile_path}")
-        stats = None
-
-    if stats is None or ds is None:
-        return None
-
-    gt = ds.GetGeoTransform()
-    width, height = ds.RasterXSize, ds.RasterYSize
-    minx, maxy = gt[0], gt[3]
-    maxx = minx + width * gt[1]
-    miny = maxy + height * gt[5]
-
-    return {
-        "path": str(tile_path),
-        "bbox_lv95": [minx, miny, maxx, maxy],
-        "size": [width, height],
-        "min": stats[0],
-        "max": stats[1],
-        "mean": stats[2],
-    }
-
-
-def collect_level_metadata(
-    dem_root: Path,
-    dop_root: Path,
-    levels: int,
-    chunk_px,
-    center,
-    global_min,
-    global_max,
-):
-    metadata = []
-    cx, cy = center
-    for L in range(levels):
-        lod_level = levels - L - 1
-        dem_tiles = list((dem_root / f"level_{lod_level}" / "tiles").glob("*.tif"))
-        for dem_tile in dem_tiles:
-            info = get_tile_metadata(dem_tile)
-            if info is None:
-                print(f"Skipping tile with no stats: {dem_tile}")
-                continue
-
-            ty, tx = [int(x) for x in dem_tile.stem.split("_")[1:3]]
-            dem_image_path = Path(f"{dem_tile}.png")
-            dop_tile = (
-                dop_root
-                / f"level_{lod_level}"
-                / "tiles"
-                / f"tile_{ty:03d}_{tx:03d}.tif"
+            out_tile_path = lod_dir / f"{tile_name}.png"
+            extract_tile_from_image(
+                combined_texture_path,
+                out_tile_path,
+                x_offset_px,
+                y_offset_px,
+                tile_level_width_px,
+                tile_level_height_px,
             )
-            dop_image_path = Path(f"{dop_tile}.png")
-
-            bbox_lv95 = info["bbox_lv95"]
-
-            bbox_lv95_world_space = [
-                bbox_lv95[0] - cx,
-                bbox_lv95[1] - cy,
-                bbox_lv95[2] - cx,
-                bbox_lv95[3] - cy,
-            ]
-
-            bbox_lv95_grid_alligned = [
-                bbox_lv95[0],
-                bbox_lv95[1],
-                bbox_lv95[2],
-                bbox_lv95[3],
-            ]
-
-            # Because we have a 1px overlap the Lv95 coordinates are not perfectly alligned to the grid.
-            # We cheat a little here by shifting the lv95 coordinate to be allgined with the grid.
-            # We do this by making sure the lv95 coordinates are a multiple of the chunk size multiplied by the resolution of the swisstopo dataset (e.g. 2m per pixel).
-            resolution = 2  # meters per pixel
-            chunk_size_m = chunk_px * resolution
-            bbox_lv95_grid_alligned = [
-                round(bbox_lv95[0] / chunk_size_m) * chunk_size_m,
-                round(bbox_lv95[1] / chunk_size_m) * chunk_size_m,
-                round(bbox_lv95[2] / chunk_size_m) * chunk_size_m,
-                round(bbox_lv95[3] / chunk_size_m) * chunk_size_m,
-            ]
-
-            bbox_lv95_world_space_grid_alligned = [
-                bbox_lv95_grid_alligned[0] - cx,
-                bbox_lv95_grid_alligned[1] - cy,
-                bbox_lv95_grid_alligned[2] - cx,
-                bbox_lv95_grid_alligned[3] - cy,
-            ]
-
-            lod_level = levels - L - 1
-            entry = {
-                "level": lod_level,
-                "tile_x": tx,
-                "tile_y": ty,
-                "dem_tif_path": str(dem_tile),
-                "dem_image_path": str(dem_image_path),
-                "dop_tif_path": str(dop_tile),
-                "dop_image_path": str(dop_image_path),
-                "bbox_lv95": bbox_lv95,
-                "bbox_lv95_grid_alligned": bbox_lv95_grid_alligned,
-                "bbox_lv95_world_space": bbox_lv95_world_space,
-                "bbox_lv95_world_space_grid_alligned": bbox_lv95_world_space_grid_alligned,
-                "global_min_elev": global_min,
-                "global_max_elev": global_max,
-                "size_px": info["size"],
-                "min_elev": info["min"],
-                "max_elev": info["max"],
-                "mean_elev": info["mean"],
-            }
-            metadata.append(entry)
-    return metadata
 
 
-def compute_global_minmax(vrt_path):
-    ds = gdal.Open(vrt_path)
-    band = ds.GetRasterBand(1)
-    stats = band.GetStatistics(True, True)
-    ds = None
-    global_min = stats[0]
-    global_max = stats[1]
-    return global_min, global_max
+def process_dem_lod_level(
+    level: int,
+    combined_height_map_path: str,
+    out_dir: str,
+    bbox_combined_height_map: ((float, float), (float, float)),
+    meters_to_px: float,
+    chunk_px: int,
+) -> str:
+    scale_factor = 2**level
+    level_width_px, level_height_px = get_width_height_px_from_bbox(
+        bbox_combined_height_map, meters_to_px
+    )
+    tile_level_width_px = level_width_px // scale_factor
+    tile_level_height_px = level_height_px // scale_factor
+    lod_dir = Path(out_dir) / "dem" / f"lod_{level}"
+    ensure_dir(lod_dir)
+    # We do not resize the height map in order to avoid interpolation artifacts.
+    # Instead, we extract tiles directly from the original combined height map at the appropriate offsets.
+    tiles_x = level_width_px // tile_level_width_px
+    tiles_y = level_height_px // tile_level_height_px
+    bbox_combined_height_map_upper_left_x = bbox_combined_height_map[0][0]
+    bbox_combined_height_map_upper_left_y = bbox_combined_height_map[0][1]
 
+    for ty in range(tiles_y):
+        for tx in range(tiles_x):
+            x_offset_px = tx * tile_level_width_px
+            y_offset_px = ty * tile_level_height_px
+            tile_bbox = (
+                (
+                    bbox_combined_height_map_upper_left_x + x_offset_px * meters_to_px,
+                    bbox_combined_height_map_upper_left_y - y_offset_px * meters_to_px,
+                ),
+                (
+                    bbox_combined_height_map_upper_left_x
+                    + (x_offset_px + tile_level_width_px) * meters_to_px,
+                    bbox_combined_height_map_upper_left_y
+                    - (y_offset_px + tile_level_height_px) * meters_to_px,
+                ),
+            )
 
-def get_bounding_box_from_vrt(vrt_path):
-    """Gets the bounding from the VRT file."""
-    ds = gdal.Open(vrt_path)
-    gt = ds.GetGeoTransform()
-    minx = gt[0]
-    maxx = gt[0] + ds.RasterXSize * gt[1]
-    miny = gt[3] + ds.RasterYSize * gt[5]
-    maxy = gt[3]
-    ds = None
-    return (minx, miny, maxx, maxy)
+            tile_name = file_name_from_bbox(tile_bbox)
 
-
-def get_bounding_box_center_from_vrt(vrt_path):
-    """Gets the bounding box center from the VRT file."""
-    ds = gdal.Open(vrt_path)
-    gt = ds.GetGeoTransform()
-    minx = gt[0]
-    maxx = gt[0] + ds.RasterXSize * gt[1]
-    miny = gt[3] + ds.RasterYSize * gt[5]
-    maxy = gt[3]
-    ds = None
-    center_x = (minx + maxx) / 2
-    center_y = (miny + maxy) / 2
-    return (center_x, center_y)
+            out_tile_path = lod_dir / f"{tile_name}.png"
+            extract_tile_from_image(
+                combined_height_map_path,
+                out_tile_path,
+                x_offset_px,
+                y_offset_px,
+                tile_level_width_px,
+                tile_level_height_px,
+            )
+    return lod_dir
 
 
 def preprocess(dem_input: str, dop_input: str, out_dir: str, chunk_px: int):
@@ -585,106 +650,329 @@ def preprocess(dem_input: str, dop_input: str, out_dir: str, chunk_px: int):
     """
     ensure_clean_dir(out_dir)
 
-    # DEM and Image mosaics
-    dem_vrt = str(Path(out_dir) / MOS_DEM_VRT)
-    dop_vrt = str(Path(out_dir) / MOS_DOP_VRT)
-    build_vrt(dem_input, dem_vrt)
-    build_vrt(dop_input, dop_vrt)
+    dem_input_files = list(Path(dem_input).glob("*.tif"))
+    dop_input_files = list(Path(dop_input).glob("*.tif"))
 
-    # Inspect mosaic dimensions
-    ds_dem = gdal.Open(dem_vrt)
-    _, (W, H), _ = get_raster_info(ds_dem)
-    ds_dem = None
+    # Figure out global min and max height across all DEM tiles
+    dem_min_height_values = np.array([], dtype=np.float32)
+    dem_max_height_values = np.array([], dtype=np.float32)
+    print(f"Processing {len(dem_input_files)} DEM input files...")
+    for dem_file in dem_input_files:
+        print(".", end="")
+        min_height, max_height = extract_min_max_height_from_dem(dem_file)
+        dem_min_height_values = np.append(dem_min_height_values, min_height)
+        dem_max_height_values = np.append(dem_max_height_values, max_height)
 
-    levels = decide_max_levels(W, H, chunk_px)
+    global_min_height = np.amin(dem_min_height_values)
+    global_max_height = np.amax(dem_max_height_values)
     print(
-        f"DEM/Image base size: {W}×{H} px → {levels} levels (L0..L{levels - 1}), top = 1×1 tile"
+        "\nGlobal DEM height range:", global_min_height, "m to", global_max_height, "m"
     )
 
-    # Crop both mosaics to same extent
-    dem_crop, extent = crop_to_divisible_square_grid(
-        dem_vrt, str(Path(out_dir) / MOS_DEM_CROP), chunk_px, levels
+    # Extract all texture data and save as images
+    print("Extracting textures from DOP files")
+    dop_tiles_dir = Path(out_dir) / "dop" / "tiles"
+    ensure_dir(dop_tiles_dir)
+    dop_upper_left_x_values = np.array([], dtype=np.int32)
+    dop_upper_left_y_values = np.array([], dtype=np.int32)
+    dop_lower_right_x_values = np.array([], dtype=np.int32)
+    dop_lower_right_y_values = np.array([], dtype=np.int32)
+
+    print(f"Processing {len(dop_input_files)} DOP input files...")
+    for dop_file in dop_input_files:
+        print(".", end="")
+        bbox = extract_texture_from_dop(dop_file, dop_tiles_dir)
+        (upper_left_x, upper_left_y), (lower_right_x, lower_right_y) = bbox
+        dop_upper_left_x_values = np.append(dop_upper_left_x_values, upper_left_x)
+        dop_upper_left_y_values = np.append(dop_upper_left_y_values, upper_left_y)
+        dop_lower_right_x_values = np.append(dop_lower_right_x_values, lower_right_x)
+        dop_lower_right_y_values = np.append(dop_lower_right_y_values, lower_right_y)
+
+    # Combine all texture images into a single large texture map
+    print("\nCombining texture tiles into a single large texture map...")
+    global_dop_upper_left_x = np.amin(dop_upper_left_x_values)
+    global_dop_upper_left_y = np.amax(dop_upper_left_y_values)
+    global_dop_lower_right_x = np.amax(dop_lower_right_x_values)
+    global_dop_lower_right_y = np.amin(dop_lower_right_y_values)
+    global_dop_bbox = (
+        (global_dop_upper_left_x, global_dop_upper_left_y),
+        (global_dop_lower_right_x, global_dop_lower_right_y),
     )
-    dop_crop, _ = crop_to_divisible_square_grid(
-        dop_vrt, str(Path(out_dir) / MOS_DOP_CROP), chunk_px, levels
+    combined_texture_dir = Path(out_dir) / "dop" / "combined"
+    ensure_dir(combined_texture_dir)
+    combined_texture_file_path = (
+        combined_texture_dir / f"{file_name_from_bbox(global_dop_bbox)}.png"
+    )
+    combine_textures(
+        dop_tiles_dir,
+        combined_texture_file_path,
+        global_dop_bbox,
+        DOP_M_TO_PX,
     )
 
-    bbox_lv95_center = get_bounding_box_center_from_vrt(dem_crop)
-    bbox_lv95 = get_bounding_box_from_vrt(dem_crop)
-
-    bbox_lv95_world_space = [
-        bbox_lv95[0] - bbox_lv95_center[0],
-        bbox_lv95[1] - bbox_lv95_center[1],
-        bbox_lv95[2] - bbox_lv95_center[0],
-        bbox_lv95[3] - bbox_lv95_center[1],
-    ]
-
-    # DEM LOD pyramid
-    dem_root = Path(out_dir) / "dem"
-    print("\nBuilding DEM LODs...")
-    build_vrt_lods(dem_crop, str(dem_root), levels, extent)
-
-    # dop LOD pyramid
-    dop_root = Path(out_dir) / "dop"
-    print("\nBuilding DOP LODs...")
-    build_vrt_lods(dop_crop, str(dop_root), levels, extent)
-
-    # Tiling process
-    print("\nTiling DEM levels...")
-    for L in range(levels):
-        target_level = levels - L - 1
-        level_vrt = str(
-            dem_root / f"level_{target_level}" / f"mosaic_L{target_level}.vrt"
+    # Extract all height data and save as images
+    dem_upper_left_x_values = np.array([], dtype=np.int32)
+    dem_upper_left_y_values = np.array([], dtype=np.int32)
+    dem_lower_right_x_values = np.array([], dtype=np.int32)
+    dem_lower_right_y_values = np.array([], dtype=np.int32)
+    dem_tiles_dir = Path(out_dir) / "dem" / "tiles"
+    ensure_dir(dem_tiles_dir)
+    print("Extracting height map tiles from DEM files")
+    print(f"Processing {len(dem_input_files)} DEM input files...")
+    for dem_file in dem_input_files:
+        bbox = extract_height_map_from_dem(
+            dem_file, dem_tiles_dir, global_min_height, global_max_height
         )
-        tiles_out = str(dem_root / f"level_{target_level}" / "tiles")
-        tile_vrt_lod(level_vrt, tiles_out, chunk_px)
+        (upper_left_x, upper_left_y), (lower_right_x, lower_right_y) = bbox
+        dem_upper_left_x_values = np.append(dem_upper_left_x_values, upper_left_x)
+        dem_upper_left_y_values = np.append(dem_upper_left_y_values, upper_left_y)
+        dem_lower_right_x_values = np.append(dem_lower_right_x_values, lower_right_x)
+        dem_lower_right_y_values = np.append(dem_lower_right_y_values, lower_right_y)
 
-    print("\nTiling DOP levels...")
-    for L in range(levels):
-        target_level = levels - L - 1
-        level_vrt = str(
-            dop_root / f"level_{target_level}" / f"mosaic_L{target_level}.vrt"
+    global_dem_upper_left_x = np.amin(dem_upper_left_x_values)
+    global_dem_upper_left_y = np.amax(dem_upper_left_y_values)
+    global_dem_lower_right_x = np.amax(dem_lower_right_x_values)
+    global_dem_lower_right_y = np.amin(dem_lower_right_y_values)
+    global_dem_bbox = (
+        (global_dem_upper_left_x, global_dem_upper_left_y),
+        (global_dem_lower_right_x, global_dem_lower_right_y),
+    )
+
+    # Combine all height maps into a single large height map
+    print("Combining height map tiles into a single large height map...")
+    combined_height_maps_dir = Path(out_dir) / "dem" / "combined"
+    ensure_dir(combined_height_maps_dir)
+    combined_height_map_file_path = (
+        combined_height_maps_dir / f"{file_name_from_bbox(global_dem_bbox)}.png"
+    )
+    combine_height_maps(
+        dem_tiles_dir,
+        combined_height_map_file_path,
+        global_dem_bbox,
+        DEM_M_TO_PX,
+    )
+    dem_combined_width_px, dem_combined_height_px = get_width_height_px_from_bbox(
+        global_dem_bbox, DEM_M_TO_PX
+    )
+
+    lod_levels = decide_max_levels(
+        dem_combined_width_px, dem_combined_height_px, chunk_px
+    )
+
+    # Crop to square dimensions that fit full LODs
+    print(
+        "Cropping combined height map and texture to square dimensions for full LODs..."
+    )
+    crop_size_px = get_crop_dimensions_squared(
+        lod_levels, chunk_px, dem_combined_width_px, dem_combined_height_px
+    )
+
+    # DEM
+    cropped_global_dem_bbox = (
+        (global_dem_upper_left_x, global_dem_upper_left_y),
+        (
+            global_dem_upper_left_x + crop_size_px * DEM_M_TO_PX,
+            global_dem_upper_left_y - crop_size_px * DEM_M_TO_PX,
+        ),
+    )
+
+    combined_height_map_cropped_dir = Path(out_dir) / "dem" / "cropped"
+    ensure_dir(combined_height_map_cropped_dir)
+    combined_height_map_cropped_file_path = (
+        combined_height_map_cropped_dir
+        / f"{file_name_from_bbox(cropped_global_dem_bbox)}.png"
+    )
+
+    crop_image_to_square(
+        combined_height_map_file_path,
+        combined_height_map_cropped_file_path,
+        crop_size_px,
+    )
+
+    # DOP
+    cropped_global_dop_bbox = (
+        (global_dop_upper_left_x, global_dop_upper_left_y),
+        (
+            global_dop_upper_left_x + crop_size_px * DOP_M_TO_PX,
+            global_dop_upper_left_y - crop_size_px * DOP_M_TO_PX,
+        ),
+    )
+    combined_texture_cropped_dir = Path(out_dir) / "dop" / "cropped"
+    ensure_dir(combined_texture_cropped_dir)
+    combined_texture_cropped_file_path = (
+        combined_texture_cropped_dir
+        / f"{file_name_from_bbox(cropped_global_dop_bbox)}.png"
+    )
+
+    crop_image_to_square(
+        combined_texture_file_path,
+        combined_texture_cropped_file_path,
+        crop_size_px,
+    )
+
+    # Now that we have a cropped combined height map, we can proceed to build LODs and tile them.
+    print(f"Generating DEM {lod_levels} LOD levels...")
+    for level in range(lod_levels):
+        print(f"Processing DEM LOD level {level}...")
+        # We skip LOD0 as at runtime because of the Quadtree structure LOD0 is not used (it is the root node).
+        if level == 0:
+            continue
+        lod_dir = process_dem_lod_level(
+            level,
+            combined_height_map_cropped_file_path,
+            out_dir,
+            cropped_global_dem_bbox,
+            DEM_M_TO_PX,
+            chunk_px,
         )
-        tiles_out = str(dop_root / f"level_{target_level}" / "tiles")
-        tile_vrt_lod(level_vrt, tiles_out, chunk_px)
+        # Patch borders to ensure seamless tiling (1px overlap)
+        patch_dem_borders(lod_dir, 1)
 
-    # Figure out global min/max for DEM scaling (needed in ThreeJS Shader and saved as metadata).
-    global_min, global_max = compute_global_minmax(dem_crop)
-    print("\nGenerating DEM images...")
-    for L in range(levels):
-        dem_tiles = list((dem_root / f"level_{L}" / "tiles").glob("*.tif"))
+    print(f"Generating DOP {lod_levels} LOD levels...")
+    for level in range(lod_levels):
+        print(f"Processing DOP LOD level {level}...")
+        process_dop_lod_level(
+            level,
+            combined_texture_cropped_file_path,
+            out_dir,
+            cropped_global_dop_bbox,
+            DOP_M_TO_PX,
+            chunk_px,
+        )
+
+    # Collect level metadata
+    print("Generating metadata...")
+    lod_levels_info = []
+    dem_bbox_center = (
+        int((cropped_global_dop_bbox[0][0] + cropped_global_dop_bbox[1][0]) / 2),
+        int((cropped_global_dop_bbox[0][1] + cropped_global_dop_bbox[1][1]) / 2),
+    )
+    dop_bbox_center = (
+        int((cropped_global_dop_bbox[0][0] + cropped_global_dop_bbox[1][0]) / 2),
+        int((cropped_global_dop_bbox[0][1] + cropped_global_dop_bbox[1][1]) / 2),
+    )
+    for level in range(lod_levels):
+        level_dem_dir = Path(out_dir) / "dem" / f"lod_{level}"
+        level_dop_dir = Path(out_dir) / "dop" / f"lod_{level}"
+
+        dem_tiles = list(level_dem_dir.glob("*.png"))
 
         for dem_tile in dem_tiles:
-            height_map_path = dem_tile.parent / f"{dem_tile.name}.png"
-            generate_height_map_from_tif(
-                str(dem_tile),
-                str(height_map_path),
-                in_scale=(global_min, global_max),
-                out_scale=(0, 65535),
-                size=chunk_px,
+            m = re.match(r"(\d+)-(\d+)_(\d+)-(\d+)\.png", dem_tile.name)
+            if not m:
+                continue
+            upper_left_x = int(m.group(1))
+            upper_left_y = int(m.group(2))
+            lower_right_x = int(m.group(3))
+            lower_right_y = int(m.group(4))
+            tile_bbox = (
+                (upper_left_x, upper_left_y),
+                (lower_right_x, lower_right_y),
             )
+            tile_bbox_world_space = (
+                (upper_left_x - dem_bbox_center[0], upper_left_y - dem_bbox_center[1]),
+                (
+                    lower_right_x - dem_bbox_center[0],
+                    lower_right_y - dem_bbox_center[1],
+                ),
+            )
+            dop_tile = level_dop_dir / dem_tile.name  # same tile name as DEM
+            level_info = {
+                "level": level,
+                "dem_image_path": str(dem_tile),
+                "dop_image_path": str(dop_tile),
+                "bbox": [
+                    int(tile_bbox[0][0]),
+                    int(tile_bbox[0][1]),
+                    int(tile_bbox[1][0]),
+                    int(tile_bbox[1][1]),
+                ],
+                "bbox_world_space": [
+                    int(tile_bbox_world_space[0][0]),
+                    int(tile_bbox_world_space[0][1]),
+                    int(tile_bbox_world_space[1][0]),
+                    int(tile_bbox_world_space[1][1]),
+                ],
+            }
+            lod_levels_info.append(level_info)
 
-    print("\nGenerating DOP images...")
-    for L in range(levels):
-        dop_tiles = list((dop_root / f"level_{L}" / "tiles").glob("*.tif"))
-        for dop_tile in dop_tiles:
-            png_path = dop_tile.parent / f"{dop_tile.name}.png"
-            generate_image_from_tif(str(dop_tile), str(png_path))
-
-    # Metadata
-    print("\nWrite tile metadata...")
-    level_metadata = collect_level_metadata(
-        dem_root, dop_root, levels, chunk_px, bbox_lv95_center, global_min, global_max
+    dem_bbox_center = (
+        int((cropped_global_dem_bbox[0][0] + cropped_global_dem_bbox[1][0]) / 2),
+        int((cropped_global_dem_bbox[0][1] + cropped_global_dem_bbox[1][1]) / 2),
+    )
+    dem_bbox_world_space = (
+        (
+            cropped_global_dem_bbox[0][0] - dem_bbox_center[0],
+            cropped_global_dem_bbox[0][1] - dem_bbox_center[1],
+        ),
+        (
+            cropped_global_dem_bbox[1][0] - dem_bbox_center[0],
+            cropped_global_dem_bbox[1][1] - dem_bbox_center[1],
+        ),
+    )
+    dop_bbox_center = (
+        int((cropped_global_dop_bbox[0][0] + cropped_global_dop_bbox[1][0]) / 2),
+        int((cropped_global_dop_bbox[0][1] + cropped_global_dop_bbox[1][1]) / 2),
+    )
+    dop_bbox_world_space = (
+        (
+            cropped_global_dop_bbox[0][0] - dop_bbox_center[0],
+            cropped_global_dop_bbox[0][1] - dop_bbox_center[1],
+        ),
+        (
+            cropped_global_dop_bbox[1][0] - dop_bbox_center[0],
+            cropped_global_dem_bbox[1][1] - dop_bbox_center[1],
+        ),
     )
     metadata = {
-        "bbox_lv95": bbox_lv95,
-        "bbox_lv95_center": bbox_lv95_center,
-        "bbox_lv95_world_space": bbox_lv95_world_space,
-        "levels": level_metadata,
+        "dem": {
+            "global_min_height": float(global_min_height),
+            "global_max_height": float(global_max_height),
+            "bbox": [
+                int(cropped_global_dem_bbox[0][0]),
+                int(cropped_global_dem_bbox[0][1]),
+                int(cropped_global_dem_bbox[1][0]),
+                int(cropped_global_dem_bbox[1][1]),
+            ],
+            "bbox_center": [
+                dem_bbox_center[0],
+                dem_bbox_center[1],
+            ],
+            "bbox_world_space": [
+                int(dem_bbox_world_space[0][0]),
+                int(dem_bbox_world_space[0][1]),
+                int(dem_bbox_world_space[1][0]),
+                int(dem_bbox_world_space[1][1]),
+            ],
+            "meters_to_px": DEM_M_TO_PX,
+            "lod_levels": lod_levels,
+        },
+        "dop": {
+            "bbox": [
+                int(cropped_global_dop_bbox[0][0]),
+                int(cropped_global_dop_bbox[0][1]),
+                int(cropped_global_dop_bbox[1][0]),
+                int(cropped_global_dop_bbox[1][1]),
+            ],
+            "bbox_center": [
+                dop_bbox_center[0],
+                dop_bbox_center[1],
+            ],
+            "bbox_world_space": [
+                int(dop_bbox_world_space[0][0]),
+                int(dop_bbox_world_space[0][1]),
+                int(dop_bbox_world_space[1][0]),
+                int(dop_bbox_world_space[1][1]),
+            ],
+            "meters_to_px": DOP_M_TO_PX,
+            "lod_levels": lod_levels,
+        },
+        "levels": lod_levels_info,
     }
-    meta_path = Path(out_dir) / "terrain_metadata.json"
-    with open(meta_path, "w") as f:
+    metadata_file_path = Path(out_dir) / "metadata.json"
+    with open(metadata_file_path, "w") as f:
         json.dump(metadata, f, indent=2)
+    print(f"Saved metadata to {metadata_file_path}")
 
     print("\nDone")
 
@@ -699,24 +987,25 @@ if __name__ == "__main__":
 
     with open(config_file_path, "r") as f:
         config = json.load(f)
-        use_patching = config.get("use_patching", True)
-        skip_download = config.get("skip_download", False)
-        dem_csv_path = config.get("dem_csv_path", None)
-        dop_csv_path = config.get("dop_csv_path", None)
-        dem_download_dir = config.get("dem_download_dir", None)
-        dop_download_dir = config.get("dop_download_dir", None)
-        output_dir = config.get("output_dir", None)
-        tile_size_px = config.get("tile_size_px", 500)
+        active_config_name = config.get("active", None)
+        if not active_config_name:
+            raise RuntimeError("No active config specified in preprocess-config.json")
+
+        active_config = config.get(active_config_name, None)
+        if not active_config:
+            raise RuntimeError(
+                f"Active config '{active_config_name}' not found in preprocess-config.json"
+            )
+        use_patching = active_config.get("use_patching", True)
+        skip_download = active_config.get("skip_download", False)
+        dem_csv_path = active_config.get("dem_csv_path", None)
+        dop_csv_path = active_config.get("dop_csv_path", None)
+        dem_download_dir = active_config.get("dem_download_dir", None)
+        dop_download_dir = active_config.get("dop_download_dir", None)
+        output_dir = active_config.get("output_dir", None)
+        tile_size_px = active_config.get("tile_size_px", 500)
         print("Config file found. Using the following parameters:")
-        print(json.dumps(config, indent=2))
-
-    MAX_LEVELS = None  # If set to None, the level will be determined automatically so that the highest level is 1x1 tile.
-    RESAMPLING = "bilinear"
-
-    MOS_DEM_VRT = "mosaic_dem.vrt"
-    MOS_DOP_VRT = "mosaic_dop.vrt"
-    MOS_DEM_CROP = "mosaic_dem_cropped.vrt"
-    MOS_DOP_CROP = "mosaic_dop_cropped.vrt"
+        print(json.dumps(active_config, indent=2))
 
     if not skip_download:
         if use_patching:
