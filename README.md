@@ -18,6 +18,7 @@ python main.py
 
 ## :clap: Ressources
 - [Process GeoTIFF Files with Python](https://kipling.medium.com/using-a-geotiff-and-a-touch-of-python-to-make-topographic-images-1c1b0349551b)
+- [Themes for TweakPane](https://tweakpane.github.io/docs/theming/#builder)
 
 ## :package: Libraries
 This project uses the following libraries

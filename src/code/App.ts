@@ -21,7 +21,7 @@ export class App {
     private _inputHandler: InputHandler
 
     private _tweaks = {
-        background: new THREE.Color(0x000000),
+        background: new THREE.Color(0xffffff),
         toneMappingOptions: {
             "None": THREE.NoToneMapping,
             "Agx": THREE.AgXToneMapping,
