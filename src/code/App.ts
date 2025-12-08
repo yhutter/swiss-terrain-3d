@@ -8,8 +8,8 @@ export class App {
     private _envMapPath = "/static/maps/envmap-1k.hdr"
 
     // We receive the units in meters (for example 1000 meters). To have a more manageable scale in the 3D scene, we apply a render scale of 0.001 so that 1000 meters becomes 1 unit in the 3D scene.
-    private _renderScale = 0.001
-    // private _renderScale = 0.01
+    // private _renderScale = 0.001
+    private _renderScale = 1
 
     private _renderer: THREE.WebGLRenderer
     private _scene: THREE.Scene
@@ -75,7 +75,9 @@ export class App {
         const canvas = document.getElementById("app") as HTMLCanvasElement
         this._renderer = new THREE.WebGLRenderer({
             antialias: true,
-            canvas: canvas
+            canvas: canvas,
+            // Logarithmic Depth Buffer helps prevent z-fighting issues in large scenes
+            logarithmicDepthBuffer: true,
         })
 
         this._renderer.setSize(window.innerWidth, window.innerHeight)
