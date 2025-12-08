@@ -34,6 +34,8 @@ export class TerrainTile {
 
         if (this.mesh && indexBuffer) {
             this.mesh.geometry.setIndex(indexBuffer)
+            // This is important otherwise the normals will be wrong after changing the index buffer
+            this.mesh.geometry.computeVertexNormals()
         }
 
         const tintColor = ColorGenerator.colorForSitchingMode.get(this.stitchingMode) || new THREE.Color(1, 1, 1)
