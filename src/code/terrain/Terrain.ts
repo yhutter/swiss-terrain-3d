@@ -30,7 +30,7 @@ export class Terrain extends THREE.Group {
     }
 
     // TODO: Make these paths selectable via dropdown in Tweakpane
-    private _terrainMetadataPath = "/static/data/output_tiles-chur/metadata.json"
+    private _terrainMetadataPath = "/static/data/output_tiles-sargans/metadata.json"
 
     private _terrainTiles: TerrainTile[] = []
     private _metadata: TerrainMetadata | null = null
