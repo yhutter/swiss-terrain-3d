@@ -113,6 +113,7 @@ export class App {
         this.setupTweaks()
 
         window.addEventListener("resize", () => this.onResize())
+        this.onResize()
         this.render()
     }
 

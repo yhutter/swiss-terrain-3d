@@ -30,7 +30,7 @@ export class Terrain extends THREE.Group {
     }
 
     // TODO: Make these paths selectable via dropdown in Tweakpane
-    private _terrainMetadataPath = "/static/data/output_tiles-sargans/metadata.json"
+    private _terrainMetadataPath = "/static/data/output_tiles-chur/metadata.json"
 
     private _terrainTiles: TerrainTile[] = []
     private _metadata: TerrainMetadata | null = null
@@ -38,13 +38,14 @@ export class Terrain extends THREE.Group {
     private _camera: THREE.PerspectiveCamera
     private _defaultCameraPosition = new THREE.Vector3(0, 1, 2)
     private _cameraQuadTreeVisualization: THREE.OrthographicCamera
-    private _cameraQuadTreeVisualizationFrustumSize = 5
+    private _cameraQuadTreeVisualizationFrustumSize = 1
     private _defaultQuadTreeVisualizationCameraPosition = new THREE.Vector3(0, 3, 0)
     private _player: Player | null = null
     private _playerStartPosition: THREE.Vector3 | null = null
     private _quadTree: QuadTree | null = null
     private _orbitControls: OrbitControls
     private _loadingTileIds = new Set<string>();
+    private _size: THREE.Vector2 = new THREE.Vector2(0, 0)
 
     get center(): THREE.Vector3 {
         if (!this._metadata) {
@@ -87,7 +88,6 @@ export class Terrain extends THREE.Group {
         this._camera = new THREE.PerspectiveCamera(75, aspect, 0.01, 1000)
         this._camera.position.copy(this._defaultCameraPosition)
 
-        // this._cameraQuadTreeVisualization = new THREE.PerspectiveCamera(75, aspect, 0.01, 1000)
         this._cameraQuadTreeVisualization = new THREE.OrthographicCamera(
             this._cameraQuadTreeVisualizationFrustumSize * aspect / -2,
             this._cameraQuadTreeVisualizationFrustumSize * aspect / 2,
@@ -111,6 +111,10 @@ export class Terrain extends THREE.Group {
             console.error("Terrain: Failed to load terrain metadata!")
             return
         }
+
+        const size = new THREE.Vector2()
+        this._metadata.bboxWorldSpace.getSize(size)
+        this._size.copy(size)
 
         const maxDepth = this.maxLevel
         this._quadTree = new QuadTree(this.boundingBox!, maxDepth)
@@ -141,6 +145,8 @@ export class Terrain extends THREE.Group {
         this._camera.aspect = aspect
         this._camera.updateProjectionMatrix()
 
+        this._cameraQuadTreeVisualizationFrustumSize = Math.max(this._size.y, this._size.x / aspect)
+        console.log("Frustum size:", this._cameraQuadTreeVisualizationFrustumSize)
         this._cameraQuadTreeVisualization.left = this._cameraQuadTreeVisualizationFrustumSize * aspect / -2
         this._cameraQuadTreeVisualization.right = this._cameraQuadTreeVisualizationFrustumSize * aspect / 2
         this._cameraQuadTreeVisualization.top = this._cameraQuadTreeVisualizationFrustumSize / 2

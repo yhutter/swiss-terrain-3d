@@ -19,5 +19,5 @@
         "output_dir": "../src/static/data/output_tiles-sargans",
         "tile_size_px": 500
     },
-    "active": "sargans"
+    "active": "chur"
 }
