@@ -7,6 +7,7 @@ import { TerrainTileParams } from './TerrainTileParams';
 import { GeometryGenerator } from '../Utils/GeometryGenerator';
 import { App } from '../App';
 import { IndexStitchingMode } from "../Utils/IndexStitchingMode";
+import { ColorGenerator } from "../Utils/ColorGenerator";
 
 export class TerrainTile {
     id: string
@@ -28,26 +29,16 @@ export class TerrainTile {
             return
         }
         this.stitchingMode = mode
-        console.log("Sitching mode is now:", IndexStitchingMode[this.stitchingMode])
 
         const indexBuffer = GeometryGenerator.getIndexBufferForStitchingMode(this.stitchingMode)
 
         if (this.mesh && indexBuffer) {
             this.mesh.geometry.setIndex(indexBuffer)
-            // this.mesh.geometry.index!.needsUpdate = true;
-            console.log(`Updated mesh index buffer for stitching mode:`)
         }
 
-        const needsSitching = this.stitchingMode !== IndexStitchingMode.Full
-        const tintColor = needsSitching ? new THREE.Color(1, 0, 0) : new THREE.Color(1, 1, 1)
+        const tintColor = ColorGenerator.colorForSitchingMode.get(this.stitchingMode) || new THREE.Color(1, 1, 1)
         if (this.material) {
             this.material.uniforms.uTintColor.value.copy(tintColor);
-        }
-        if (this.lineMesh) {
-            const colorBufferAttribute = this.getColorBufferAttributeForStitchingMode(mode)
-            this.lineMesh.geometry.setAttribute('color', colorBufferAttribute)
-            this.lineMesh.geometry.attributes.color.needsUpdate = true;
-            console.log(`Updated line mesh colors for stitching mode:`)
         }
     }
 
@@ -121,7 +112,7 @@ export class TerrainTile {
             0,
             params.zPos,
         )
-        terrainTile.lineMesh = terrainTile.createLineMesh(params.bounds, params.stitchingMode)
+        terrainTile.lineMesh = terrainTile.createLineMesh(params.bounds)
         return terrainTile
     }
 
@@ -129,49 +120,7 @@ export class TerrainTile {
         this.id = id
     }
 
-    private getColorBufferAttributeForStitchingMode(stitchingMode: IndexStitchingMode): THREE.BufferAttribute {
-        const colors = []
-        const baseColor = [1, 1, 1]
-
-        // South edge
-        if (stitchingMode == IndexStitchingMode.South) {
-            console.log("South edge stitching")
-        }
-        if (stitchingMode == IndexStitchingMode.East) {
-            console.log("East edge stitching")
-        }
-        if (stitchingMode == IndexStitchingMode.North) {
-            console.log("North edge stitching")
-        }
-        if (stitchingMode == IndexStitchingMode.West) {
-            console.log("West edge stitching")
-        }
-
-        const isSouthEdgeStitching = stitchingMode === IndexStitchingMode.South || stitchingMode === IndexStitchingMode.SouthEast || stitchingMode === IndexStitchingMode.SouthWest
-        const isEastEdgeStitching = stitchingMode === IndexStitchingMode.East || stitchingMode === IndexStitchingMode.NorthEast || stitchingMode === IndexStitchingMode.SouthEast
-        const isNorthEdgeStitching = stitchingMode === IndexStitchingMode.North || stitchingMode === IndexStitchingMode.NorthEast || stitchingMode === IndexStitchingMode.NorthWest
-        const isWestEdgeStitching = stitchingMode === IndexStitchingMode.West || stitchingMode === IndexStitchingMode.NorthWest || stitchingMode === IndexStitchingMode.SouthWest
-
-        // South Edge
-        const southEdgeColor = isSouthEdgeStitching ? [1, 0, 0] : baseColor
-        colors.push(...southEdgeColor, ...southEdgeColor)
-
-        // East edge
-        const eastEdgeColor = isEastEdgeStitching ? [1, 0, 0] : baseColor
-        colors.push(...eastEdgeColor, ...eastEdgeColor)
-
-        // North edge
-        const northEdgeColor = isNorthEdgeStitching ? [1, 0, 0] : baseColor
-        colors.push(...northEdgeColor, ...northEdgeColor)
-
-        // West edge
-        const westEdgeColor = isWestEdgeStitching ? [1, 0, 0] : baseColor
-        colors.push(...westEdgeColor, ...westEdgeColor)
-
-        return new THREE.Float32BufferAttribute(colors, 3)
-    }
-
-    private createLineMesh(bounds: THREE.Box2, stitchingMode: IndexStitchingMode): THREE.LineSegments {
+    private createLineMesh(bounds: THREE.Box2): THREE.LineSegments {
         const geometry = new THREE.BufferGeometry()
         const vertices = []
 
@@ -180,7 +129,6 @@ export class TerrainTile {
         const minHeight = 0.0
 
         // Insert lines for the 4 corners according to bounding box
-
         vertices.push(
             // South edge
             cellMin.x, minHeight, cellMin.y,
@@ -199,10 +147,13 @@ export class TerrainTile {
             cellMin.x, minHeight, cellMin.y,
         )
 
-        const colorBufferAttribute = this.getColorBufferAttributeForStitchingMode(stitchingMode)
+        const colors = []
+        for (let i = 0; i < 8; i++) {
+            colors.push(1, 1, 1)
+        }
 
         geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3))
-        geometry.setAttribute('color', colorBufferAttribute)
+        geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3))
         const material = new THREE.LineBasicMaterial({
             vertexColors: true,
             depthWrite: false,

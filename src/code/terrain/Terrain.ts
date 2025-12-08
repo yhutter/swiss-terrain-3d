@@ -9,6 +9,7 @@ import { OrbitControls } from "three/examples/jsm/Addons.js"
 import { QuadTreeNode } from "../QuadTree/QuadTreeNode";
 import { GeometryGenerator } from "../Utils/GeometryGenerator";
 import { IndexStitchingMode } from "../Utils/IndexStitchingMode";
+import { ColorGenerator } from "../Utils/ColorGenerator";
 
 export class Terrain extends THREE.Group {
 
@@ -18,10 +19,17 @@ export class Terrain extends THREE.Group {
         wireframe: false,
         anisotropy: 16,
         enableQuadTreeVisualization: true,
+        northStitchingColor: ColorGenerator.colorForSitchingMode.get(IndexStitchingMode.North) || ColorGenerator.white,
+        eastStitchingColor: ColorGenerator.colorForSitchingMode.get(IndexStitchingMode.East) || ColorGenerator.white,
+        southStitchingColor: ColorGenerator.colorForSitchingMode.get(IndexStitchingMode.South) || ColorGenerator.white,
+        westStitchingColor: ColorGenerator.colorForSitchingMode.get(IndexStitchingMode.West) || ColorGenerator.white,
+        northEastStitchingColor: ColorGenerator.colorForSitchingMode.get(IndexStitchingMode.NorthEast) || ColorGenerator.white,
+        southEastStitchingColor: ColorGenerator.colorForSitchingMode.get(IndexStitchingMode.SouthEast) || ColorGenerator.white,
+        southWestStitchingColor: ColorGenerator.colorForSitchingMode.get(IndexStitchingMode.SouthWest) || ColorGenerator.white,
+        northWestStitchingColor: ColorGenerator.colorForSitchingMode.get(IndexStitchingMode.NorthWest) || ColorGenerator.white,
     }
 
     // TODO: Make these paths selectable via dropdown in Tweakpane
-    // private _terrainMetadataPath = "/static/data/output_tiles-sargans/metadata.json"
     private _terrainMetadataPath = "/static/data/output_tiles-sargans/metadata.json"
 
     private _terrainTiles: TerrainTile[] = []
@@ -289,6 +297,59 @@ export class Terrain extends THREE.Group {
             label: "Enable QuadTree Visualization"
         }).on("change", (e) => {
             this.toggleQuadTreeVisualization(e.value)
+        })
+
+        const stitchingFolder = folder.addFolder({
+            title: 'Stitching Colors',
+            expanded: true,
+        })
+
+        stitchingFolder.addBinding(this._tweaks, "northStitchingColor", {
+            label: "North Color",
+            view: "color",
+            color: { type: "float" }
+        })
+
+        stitchingFolder.addBinding(this._tweaks, "northEastStitchingColor", {
+            label: "North East",
+            view: "color",
+            color: { type: "float" }
+        })
+
+        stitchingFolder.addBinding(this._tweaks, "northWestStitchingColor", {
+            label: "North West",
+            view: "color",
+            color: { type: "float" }
+        })
+
+        stitchingFolder.addBinding(this._tweaks, "eastStitchingColor", {
+            label: "East",
+            view: "color",
+            color: { type: "float" }
+        })
+
+        stitchingFolder.addBinding(this._tweaks, "southStitchingColor", {
+            label: "South",
+            view: "color",
+            color: { type: "float" }
+        })
+
+        stitchingFolder.addBinding(this._tweaks, "southEastStitchingColor", {
+            label: "South East",
+            view: "color",
+            color: { type: "float" }
+        })
+
+        stitchingFolder.addBinding(this._tweaks, "southWestStitchingColor", {
+            label: "South West",
+            view: "color",
+            color: { type: "float" }
+        })
+
+        stitchingFolder.addBinding(this._tweaks, "westStitchingColor", {
+            label: "West",
+            view: "color",
+            color: { type: "float" }
         })
     }
 }
