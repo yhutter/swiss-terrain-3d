@@ -31,6 +31,7 @@ This project uses the following libraries
 - [ThreeJS Custom Shader Material](https://github.com/FarazzShaikh/THREE-CustomShaderMaterial)
 - [TweakPane](https://tweakpane.github.io/docs/)
 - [Python GeoTIFF Library)](https://github.com/KipCrossing/geotiff)
+- [stats-gl](https://github.com/RenaudRohlinger/stats-gl)
 
 ## :rocket: How to Run
 ```bash

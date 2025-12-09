@@ -12,6 +12,7 @@
   "license": "MIT",
   "description": "",
   "dependencies": {
+    "stats-gl": "^3.8.0",
     "three": "^0.180.0",
     "three-custom-shader-material": "^6.4.0"
   },

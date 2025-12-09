@@ -153,8 +153,6 @@ export class TerrainTile extends THREE.Group {
 
         terrainTile._mesh = new THREE.Mesh(geo, terrainTile._material)
         terrainTile.add(terrainTile._mesh)
-        // TODO: Check if we need to disable frustum culling
-        // terrainTile._mesh.frustumCulled = false
         terrainTile._mesh.position.set(
             params.xPos,
             0,

@@ -2,6 +2,7 @@ import { HDRLoader } from "three/examples/jsm/Addons.js"
 import * as THREE from "three"
 import { Pane, FolderApi } from "tweakpane"
 import { Terrain } from "./Terrain/Terrain"
+import Stats from "stats-gl";
 
 export class App {
     private _envMapPath = "/static/maps/envmap-1k.hdr"
@@ -17,6 +18,20 @@ export class App {
     private _tweaksFolder: FolderApi
     private _textureLoader: THREE.TextureLoader
     private _hdrLoader: HDRLoader
+    private readonly _stats = new Stats({
+        trackFPS: true,
+        trackGPU: false,
+        trackHz: false,
+        trackCPT: false,
+        logsPerSecond: 4,
+        graphsPerSecond: 30,
+        samplesLog: 40,
+        samplesGraph: 10,
+        precision: 2,
+        horizontal: true,
+        minimal: false,
+        mode: 0
+    });
 
     private _tweaks = {
         background: new THREE.Color(0xffffff),
@@ -27,6 +42,7 @@ export class App {
             "Reinhard": THREE.ReinhardToneMapping,
         },
         toneMapping: THREE.NoToneMapping,
+        showStats: true,
     }
 
     private _terrain: Terrain | null = null
@@ -92,6 +108,8 @@ export class App {
 
         this._pane = new Pane()
         this._tweaksFolder = this._pane.addFolder({ title: "Swiss Terrain 3D", expanded: true })
+        document.body.appendChild(this._stats.dom);
+
     }
 
     async run(): Promise<void> {
@@ -150,9 +168,13 @@ export class App {
     }
 
     private render() {
+        this._stats.begin()
         this.update()
         const camera = this._terrain!.activeCamera
         this._renderer.render(this._scene, camera)
+        this._stats.end()
+        this._stats.update();
+
         window.requestAnimationFrame(() => this.render())
     }
 }
