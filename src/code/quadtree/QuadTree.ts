@@ -161,7 +161,8 @@ export class QuadTree {
         const distanceToNode = this.distanceToNode(node, position);
 
         // Determine if we need to subdivide
-        if (distanceToNode < node.size.x && node.level < this._maxDepth) {
+        const distanceFactor = 2
+        if (distanceToNode < node.size.x * distanceFactor && node.level < this._maxDepth) {
             this.splitNode(node);
         }
 
