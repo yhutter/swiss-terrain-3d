@@ -37,8 +37,6 @@ export class Terrain extends THREE.Group {
     private _metadata: TerrainMetadata | null = null
     private _camera: THREE.PerspectiveCamera
     private _cameraQuadTreeVisualization: THREE.OrthographicCamera
-    private _cameraQuadTreeVisualizationFrustumSize = 1
-    private _defaultQuadTreeVisualizationCameraPosition = new THREE.Vector3(0, 3, 0)
     private _cameraPosition: THREE.Vector3 = new THREE.Vector3(0, 0, 0)
     private _quadTree: QuadTree | null = null
     private _terrainCameraControls: TerrainCameraControls
@@ -88,16 +86,9 @@ export class Terrain extends THREE.Group {
         const far = 25000
         this._camera = new THREE.PerspectiveCamera(45, aspect, near, far)
 
-        this._cameraQuadTreeVisualization = new THREE.OrthographicCamera(
-            this._cameraQuadTreeVisualizationFrustumSize * aspect / -2,
-            this._cameraQuadTreeVisualizationFrustumSize * aspect / 2,
-            this._cameraQuadTreeVisualizationFrustumSize / 2,
-            this._cameraQuadTreeVisualizationFrustumSize / -2,
-            0.01,
-            25000
-        )
-        this._cameraQuadTreeVisualization.position.copy(this._defaultQuadTreeVisualizationCameraPosition)
-
+        this._cameraQuadTreeVisualization = new THREE.OrthographicCamera()
+        this._cameraQuadTreeVisualization.near = near
+        this._cameraQuadTreeVisualization.far = far
         this._terrainCameraControls = new TerrainCameraControls(this._camera, this, App.instance.renderer.domElement)
         this.setupTweaks()
     }
@@ -125,8 +116,17 @@ export class Terrain extends THREE.Group {
         )
         this._camera.position.copy(this._cameraPosition)
 
-        this._cameraQuadTreeVisualization.position.x = this._cameraPosition.x
-        this._cameraQuadTreeVisualization.position.z = this._cameraPosition.z
+        this._cameraQuadTreeVisualization.position.set(
+            this.center.x,
+            this._metadata.globalMaxElevation,
+            this.center.z
+        );
+        this._cameraQuadTreeVisualization.lookAt(
+            this.center.x,
+            0,
+            this.center.z
+        );
+
         this._cameraQuadTreeVisualization.rotation.x = -Math.PI / 2
 
         this.toggleQuadTreeVisualization(this._tweaks.enableQuadTreeVisualization)
@@ -138,11 +138,11 @@ export class Terrain extends THREE.Group {
         this._camera.aspect = aspect
         this._camera.updateProjectionMatrix()
 
-        this._cameraQuadTreeVisualizationFrustumSize = Math.max(this._size.y, this._size.x / aspect)
-        this._cameraQuadTreeVisualization.left = this._cameraQuadTreeVisualizationFrustumSize * aspect / -2
-        this._cameraQuadTreeVisualization.right = this._cameraQuadTreeVisualizationFrustumSize * aspect / 2
-        this._cameraQuadTreeVisualization.top = this._cameraQuadTreeVisualizationFrustumSize / 2
-        this._cameraQuadTreeVisualization.bottom = this._cameraQuadTreeVisualizationFrustumSize / -2
+        const cameraQuadTreeFrustumSize = Math.max(this._size.y, this._size.x / aspect)
+        this._cameraQuadTreeVisualization.left = cameraQuadTreeFrustumSize * aspect / -2
+        this._cameraQuadTreeVisualization.right = cameraQuadTreeFrustumSize * aspect / 2
+        this._cameraQuadTreeVisualization.top = cameraQuadTreeFrustumSize / 2
+        this._cameraQuadTreeVisualization.bottom = cameraQuadTreeFrustumSize / -2
         this._cameraQuadTreeVisualization.updateProjectionMatrix()
     }
 
