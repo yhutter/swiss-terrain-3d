@@ -17,16 +17,18 @@ python main.py
 ```
 
 ## :clap: Ressources
-- [Process GeoTIFF Files with Python](https://kipling.medium.com/using-a-geotiff-and-a-touch-of-python-to-make-topographic-images-1c1b0349551b)
-- [Themes for TweakPane](https://tweakpane.github.io/docs/theming/#builder)
-
-## :package: Libraries
-This project uses the following libraries
 - [ThreeJS](https://threejs.org/)
-- [ThreeJS Custom Shader Material](https://github.com/FarazzShaikh/THREE-CustomShaderMaterial)
 - [SimonDev GameDev Course](https://simondev.io/courses/)
 - [SimonDev Quadtree & LOD](https://www.youtube.com/watch?v=YO_A5w_fxRQ)
 - [SimonDev Quadtree Implementation](https://github.com/simondevyoutube/ProceduralTerrain_Part3)
+- [Process GeoTIFF Files with Python](https://kipling.medium.com/using-a-geotiff-and-a-touch-of-python-to-make-topographic-images-1c1b0349551b)
+- [Themes for TweakPane](https://tweakpane.github.io/docs/theming/#builder)
+- [ThreeJS Examples](https://threejs.org/examples/)
+- [SimonDev Custom FPS Controls](https://github.com/simondevyoutube/ProceduralTerrain_Part3/blob/master/src/controls.js)
+
+## :package: Libraries
+This project uses the following libraries
+- [ThreeJS Custom Shader Material](https://github.com/FarazzShaikh/THREE-CustomShaderMaterial)
 - [TweakPane](https://tweakpane.github.io/docs/)
 - [Python GeoTIFF Library)](https://github.com/KipCrossing/geotiff)
 

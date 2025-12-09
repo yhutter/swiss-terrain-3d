@@ -4,12 +4,12 @@ import { TerrainTile } from "./TerrainTile";
 import { TerrainMetadata } from "./TerrainMetadata";
 import { TerrainTileManager } from "./TerrainTileManager";
 import { QuadTree } from "../QuadTree/QuadTree";
-import { Player } from '../Player';
 import { OrbitControls } from "three/examples/jsm/Addons.js"
 import { QuadTreeNode } from "../QuadTree/QuadTreeNode";
 import { GeometryGenerator } from "../Utils/GeometryGenerator";
 import { IndexStitchingMode } from "../Utils/IndexStitchingMode";
 import { ColorGenerator } from "../Utils/ColorGenerator";
+import { TerrainCameraControls } from "./TerrainCameraControls";
 
 export class Terrain extends THREE.Group {
 
@@ -18,7 +18,7 @@ export class Terrain extends THREE.Group {
     private _tweaks = {
         wireframe: false,
         anisotropy: 16,
-        enableQuadTreeVisualization: true,
+        enableQuadTreeVisualization: false,
         northStitchingColor: ColorGenerator.colorForSitchingMode.get(IndexStitchingMode.North) || ColorGenerator.white,
         eastStitchingColor: ColorGenerator.colorForSitchingMode.get(IndexStitchingMode.East) || ColorGenerator.white,
         southStitchingColor: ColorGenerator.colorForSitchingMode.get(IndexStitchingMode.South) || ColorGenerator.white,
@@ -30,20 +30,18 @@ export class Terrain extends THREE.Group {
     }
 
     // TODO: Make these paths selectable via dropdown in Tweakpane
-    private _terrainMetadataPath = "/static/data/output_tiles-sargans/metadata.json"
+    private _terrainMetadataPath = "/static/data/output_tiles-chur/metadata.json"
 
     private _terrainTiles: TerrainTile[] = []
     private _metadata: TerrainMetadata | null = null
     private _shouldUseDemTexture: boolean = false
     private _camera: THREE.PerspectiveCamera
-    private _defaultCameraPosition = new THREE.Vector3(0, 1, 2)
     private _cameraQuadTreeVisualization: THREE.OrthographicCamera
     private _cameraQuadTreeVisualizationFrustumSize = 1
     private _defaultQuadTreeVisualizationCameraPosition = new THREE.Vector3(0, 3, 0)
-    private _player: Player | null = null
-    private _playerStartPosition: THREE.Vector3 | null = null
+    private _cameraPosition: THREE.Vector3 = new THREE.Vector3(0, 0, 0)
     private _quadTree: QuadTree | null = null
-    private _orbitControls: OrbitControls
+    private _terrainCameraControls: TerrainCameraControls
     private _loadingTileIds = new Set<string>();
     private _size: THREE.Vector2 = new THREE.Vector2(0, 0)
 
@@ -85,8 +83,8 @@ export class Terrain extends THREE.Group {
         super()
 
         const aspect = App.instance.aspect
-        this._camera = new THREE.PerspectiveCamera(75, aspect, 0.01, 1000)
-        this._camera.position.copy(this._defaultCameraPosition)
+        // TODO: Calculate far based on terrain size
+        this._camera = new THREE.PerspectiveCamera(70, aspect, 0.01, 25000)
 
         this._cameraQuadTreeVisualization = new THREE.OrthographicCamera(
             this._cameraQuadTreeVisualizationFrustumSize * aspect / -2,
@@ -94,12 +92,11 @@ export class Terrain extends THREE.Group {
             this._cameraQuadTreeVisualizationFrustumSize / 2,
             this._cameraQuadTreeVisualizationFrustumSize / -2,
             0.01,
-            1000
+            25000
         )
         this._cameraQuadTreeVisualization.position.copy(this._defaultQuadTreeVisualizationCameraPosition)
 
-        this._orbitControls = new OrbitControls(this._camera, App.instance.renderer.domElement)
-        this._orbitControls.enableDamping = true
+        this._terrainCameraControls = new TerrainCameraControls(this._camera, this, App.instance.renderer.domElement)
         this.setupTweaks()
     }
 
@@ -119,24 +116,18 @@ export class Terrain extends THREE.Group {
         const maxDepth = this.maxLevel
         this._quadTree = new QuadTree(this.boundingBox!, maxDepth)
 
-        this._camera.lookAt(this.center)
-
-        this._playerStartPosition = new THREE.Vector3(
+        this._cameraPosition = new THREE.Vector3(
             this.center.x,
-            0.0,
+            (this._metadata.globalMaxElevation - this._metadata.globalMinElevation) * 0.5,
             this.center.z,
         )
+        this._camera.position.copy(this._cameraPosition)
 
-        this._player = new Player(this._playerStartPosition)
-        this.add(this._player.mesh)
-
-        this._cameraQuadTreeVisualization.position.x = this._playerStartPosition.x
-        this._cameraQuadTreeVisualization.position.z = this._playerStartPosition.z
+        this._cameraQuadTreeVisualization.position.x = this._cameraPosition.x
+        this._cameraQuadTreeVisualization.position.z = this._cameraPosition.z
         this._cameraQuadTreeVisualization.rotation.x = -Math.PI / 2
 
         this.toggleQuadTreeVisualization(this._tweaks.enableQuadTreeVisualization)
-
-        // this.tileStitchingPlayground()
 
         App.instance.scene.add(this)
     }
@@ -146,7 +137,6 @@ export class Terrain extends THREE.Group {
         this._camera.updateProjectionMatrix()
 
         this._cameraQuadTreeVisualizationFrustumSize = Math.max(this._size.y, this._size.x / aspect)
-        console.log("Frustum size:", this._cameraQuadTreeVisualizationFrustumSize)
         this._cameraQuadTreeVisualization.left = this._cameraQuadTreeVisualizationFrustumSize * aspect / -2
         this._cameraQuadTreeVisualization.right = this._cameraQuadTreeVisualizationFrustumSize * aspect / 2
         this._cameraQuadTreeVisualization.top = this._cameraQuadTreeVisualizationFrustumSize / 2
@@ -155,12 +145,10 @@ export class Terrain extends THREE.Group {
     }
 
     update(dt: number) {
-        this._orbitControls.update()
-        if (this._player != null) {
-            this._player.update(dt)
-        }
+        this._terrainCameraControls.update(dt)
+        this._cameraPosition.copy(this._camera.position)
         if (this._quadTree != null) {
-            const position = this._player?.position2D || new THREE.Vector2(0, 0)
+            const position = new THREE.Vector2(this._cameraPosition.x, this._cameraPosition.z)
             this._quadTree.insertPosition(position)
             const quadTreeNodes = this._quadTree.getChildren()
             for (const node of quadTreeNodes) {
@@ -170,35 +158,11 @@ export class Terrain extends THREE.Group {
         }
     }
 
-
-    // TODO: Remove this method if we are sure tile stitching is working correctly.
-    private tileStitchingPlayground() {
-        const geometryOne = GeometryGenerator.createRegularGridGeometry(this._tileSize, 1)
-        geometryOne.rotateX(-Math.PI * 0.5)
-
-        const materialOne = new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true })
-        const meshOne = new THREE.Mesh(geometryOne, materialOne)
-        this.add(meshOne)
-
-        const geometryTwo = GeometryGenerator.createRegularGridGeometry(this._tileSize, 0.5)
-        geometryTwo.rotateX(-Math.PI * 0.5)
-        const indexBufferGeometryTwo = GeometryGenerator.getIndexBufferForStitchingMode(IndexStitchingMode.West)
-        if (indexBufferGeometryTwo !== undefined) {
-            geometryTwo.setIndex(indexBufferGeometryTwo)
-        }
-
-        const materialTwo = new THREE.MeshBasicMaterial({ color: 0xff0000, wireframe: true })
-        const meshTwo = new THREE.Mesh(geometryTwo, materialTwo)
-        meshTwo.position.x = 0.75
-        meshTwo.position.z = -0.25
-        this.add(meshTwo)
-    }
-
     private updateFromQuadTreeNodes(quadTreeNodes: QuadTreeNode[]): void {
         // Track player position
         if (this._tweaks.enableQuadTreeVisualization) {
-            this._cameraQuadTreeVisualization.position.x = this._player!.position.x
-            this._cameraQuadTreeVisualization.position.z = this._player!.position.z
+            this._cameraQuadTreeVisualization.position.x = this._cameraPosition.x
+            this._cameraQuadTreeVisualization.position.z = this._cameraPosition.z
         }
 
         // Figure out which tiles we can remove, e.g. tiles that are not in the quadTreeNodes.
@@ -305,8 +269,8 @@ export class Terrain extends THREE.Group {
             this.toggleQuadTreeVisualization(e.value)
         })
 
-        const stitchingFolder = folder.addFolder({
-            title: 'Stitching Colors',
+        const stitchingFolder = App.instance.pane.addFolder({
+            title: 'Terrain Stitching Colors',
             expanded: true,
         })
 

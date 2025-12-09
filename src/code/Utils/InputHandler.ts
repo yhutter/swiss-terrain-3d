@@ -15,19 +15,27 @@ export class InputHandler {
         return this.keysPressed.has(keyCode);
     }
 
-    isArrowUpPressed(): boolean {
+    isForwardPressed(): boolean {
         return this.isKeyPressed("ArrowUp") || this.isKeyPressed("KeyW");
     }
 
-    isArrowDownPressed(): boolean {
+    isUpPressed(): boolean {
+        return this.isKeyPressed("KeyE");
+    }
+
+    isDownPressed(): boolean {
+        return this.isKeyPressed("KeyR");
+    }
+
+    isBackwardPressed(): boolean {
         return this.isKeyPressed("ArrowDown") || this.isKeyPressed("KeyS");
     }
 
-    isArrowLeftPressed(): boolean {
+    isLeftPressed(): boolean {
         return this.isKeyPressed("ArrowLeft") || this.isKeyPressed("KeyA");
     }
 
-    isArrowRightPressed(): boolean {
+    isRightPressed(): boolean {
         return this.isKeyPressed("ArrowRight") || this.isKeyPressed("KeyD");
     }
 }

@@ -2,7 +2,6 @@ import { HDRLoader } from "three/examples/jsm/Addons.js"
 import * as THREE from "three"
 import { Pane, FolderApi } from "tweakpane"
 import { Terrain } from "./Terrain/Terrain"
-import { InputHandler } from "./Utils/InputHandler"
 
 export class App {
     private _envMapPath = "/static/maps/envmap-1k.hdr"
@@ -18,7 +17,6 @@ export class App {
     private _tweaksFolder: FolderApi
     private _textureLoader: THREE.TextureLoader
     private _hdrLoader: HDRLoader
-    private _inputHandler: InputHandler
 
     private _tweaks = {
         background: new THREE.Color(0xffffff),
@@ -63,16 +61,15 @@ export class App {
         return window.innerWidth / window.innerHeight
     }
 
-    get inputHandler(): InputHandler {
-        return this._inputHandler
-    }
-
     get renderScale(): number {
         return this._renderScale
     }
 
     constructor() {
         const canvas = document.getElementById("app") as HTMLCanvasElement
+        if (!canvas) {
+            console.error("No canvas element with id 'app' found!")
+        }
         this._renderer = new THREE.WebGLRenderer({
             antialias: true,
             canvas: canvas,
@@ -97,8 +94,6 @@ export class App {
 
         this._pane = new Pane()
         this._tweaksFolder = this._pane.addFolder({ title: "Swiss Terrain 3D", expanded: true })
-
-        this._inputHandler = new InputHandler()
     }
 
     async run(): Promise<void> {

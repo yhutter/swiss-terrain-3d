@@ -109,6 +109,8 @@ export class TerrainTile {
         })
 
         terrainTile.mesh = new THREE.Mesh(geo, terrainTile.material)
+        // TODO: Find a better way to handle this
+        terrainTile.mesh.frustumCulled = false
         terrainTile.mesh.position.set(
             params.xPos,
             0,
