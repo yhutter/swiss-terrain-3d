@@ -17,6 +17,8 @@ export class TerrainTile extends THREE.Group {
     private _demTexture: THREE.Texture | null = null
     private _dopTexture: THREE.Texture | null = null
     private _stitchingMode: IndexStitchingMode = IndexStitchingMode.Full
+    private _boxHelper: THREE.BoxHelper | null = null
+    private _params: TerrainTileParams;
 
 
     get identifier(): string {
@@ -29,6 +31,12 @@ export class TerrainTile extends THREE.Group {
         }
         if (this._material) {
             this._material.uniforms.uUseDemTexture.value = value
+        }
+    }
+
+    enableBoxHelper(value: boolean) {
+        if (this._boxHelper) {
+            this._boxHelper.visible = value
         }
     }
 
@@ -75,6 +83,9 @@ export class TerrainTile extends THREE.Group {
     }
 
     dispose() {
+        if (this._boxHelper) {
+            this.remove(this._boxHelper)
+        }
         if (this._mesh) {
             this._mesh.geometry.dispose()
             this.remove(this._mesh)
@@ -95,7 +106,7 @@ export class TerrainTile extends THREE.Group {
     }
 
     static async createFromParams(params: TerrainTileParams): Promise<TerrainTile> {
-        const terrainTile = new TerrainTile(params.id)
+        const terrainTile = new TerrainTile(params)
         const resolution = params.resolution
         const wireframe = params.wireframe
         const size = params.size
@@ -142,22 +153,47 @@ export class TerrainTile extends THREE.Group {
 
         terrainTile._mesh = new THREE.Mesh(geo, terrainTile._material)
         terrainTile.add(terrainTile._mesh)
-        // TODO: Do frustum culling on GPU
-        terrainTile._mesh.frustumCulled = false
+        // TODO: Check if we need to disable frustum culling
+        // terrainTile._mesh.frustumCulled = false
         terrainTile._mesh.position.set(
             params.xPos,
             0,
             params.zPos,
         )
+
+
+        // Important for frustum culling
+        terrainTile.recomputeBoundingSphere()
+        terrainTile._boxHelper = new THREE.BoxHelper(terrainTile._mesh, 0xff0000)
+        terrainTile._boxHelper.visible = params.enableBoxHelper
+        terrainTile.add(terrainTile._boxHelper)
+
+        terrainTile._stitchingMode = params.stitchingMode
         terrainTile._lineMesh = terrainTile.createLineMesh(params.bounds)
         terrainTile._lineMesh.visible = !params.shouldUseDemTexture
         terrainTile.add(terrainTile._lineMesh)
         return terrainTile
     }
 
-    constructor(identifier: string) {
+    constructor(params: TerrainTileParams) {
         super()
-        this._identifier = identifier
+        this._params = params
+        this._identifier = this._params.id
+    }
+
+    private recomputeBoundingSphere() {
+        if (!this._mesh) {
+            return
+        }
+        this._mesh.geometry.computeBoundingBox()
+        const bb = this._mesh.geometry.boundingBox!
+        bb.min.y = this._params.minHeightScale
+        bb.max.y = this._params.maxHeightScale
+        this._mesh.geometry.boundingBox = bb
+
+        const sphere = new THREE.Sphere()
+        bb.getBoundingSphere(sphere)
+        this._mesh.geometry.boundingSphere = sphere
     }
 
     private createLineMesh(bounds: THREE.Box2): THREE.LineSegments {

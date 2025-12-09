@@ -14,6 +14,7 @@ export type TerrainTileParams = {
     wireframe: boolean,
     shouldUseDemTexture: boolean,
     enableStitchingColor: boolean,
+    enableBoxHelper: boolean,
     minHeightScale: number,
     maxHeightScale: number,
     stitchingMode: IndexStitchingMode

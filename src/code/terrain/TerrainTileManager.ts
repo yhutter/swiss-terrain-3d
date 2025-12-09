@@ -26,7 +26,7 @@ export class TerrainTileManager {
         }
     }
 
-    static async requestTerrainTileForNode(node: QuadTreeNode, anisotropy: number, resolution: number, wireframe: boolean, shouldUseDemTexture: boolean, enableStitchingColor: boolean): Promise<TerrainTile | null> {
+    static async requestTerrainTileForNode(node: QuadTreeNode, anisotropy: number, resolution: number, wireframe: boolean, shouldUseDemTexture: boolean, enableStitchingColor: boolean, enableBoxHelper: boolean): Promise<TerrainTile | null> {
 
         if (TerrainTileManager._terrainMetadata === null) {
             console.warn("TerrainTileManager: Terrain metadata not initialized.");
@@ -67,6 +67,7 @@ export class TerrainTileManager {
             wireframe: wireframe,
             shouldUseDemTexture: shouldUseDemTexture,
             enableStitchingColor: enableStitchingColor,
+            enableBoxHelper: enableBoxHelper,
             minHeightScale: TerrainTileManager._terrainMetadata.globalMinElevation,
             maxHeightScale: TerrainTileManager._terrainMetadata.globalMaxElevation,
             stitchingMode: node.indexStitchingMode,

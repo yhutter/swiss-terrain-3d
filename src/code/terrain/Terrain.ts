@@ -18,6 +18,7 @@ export class Terrain extends THREE.Group {
         wireframe: false,
         anisotropy: 16,
         enableQuadTreeVisualization: false,
+        enableBoxHelper: false,
         enableStitchingColor: true,
         northStitchingColor: ColorGenerator.colorForSitchingMode.get(IndexStitchingMode.North) || ColorGenerator.white,
         eastStitchingColor: ColorGenerator.colorForSitchingMode.get(IndexStitchingMode.East) || ColorGenerator.white,
@@ -85,7 +86,7 @@ export class Terrain extends THREE.Group {
         // TODO: Calculate far based on terrain size
         const near = 1
         const far = 25000
-        this._camera = new THREE.PerspectiveCamera(70, aspect, near, far)
+        this._camera = new THREE.PerspectiveCamera(45, aspect, near, far)
 
         this._cameraQuadTreeVisualization = new THREE.OrthographicCamera(
             this._cameraQuadTreeVisualizationFrustumSize * aspect / -2,
@@ -183,6 +184,9 @@ export class Terrain extends THREE.Group {
             const existingTile = this._terrainTiles.find(tile => tile.identifier === node.id)
             if (existingTile) {
                 // Keep in sync with tweaks
+                existingTile.enableBoxHelper(this._tweaks.enableBoxHelper)
+                existingTile.setAnisotropy(this._tweaks.anisotropy)
+                existingTile.setWireframe(this._tweaks.wireframe)
                 existingTile.enableStitchingColor(this._tweaks.enableStitchingColor)
                 existingTile.useDemTexture(!this._tweaks.enableQuadTreeVisualization)
                 existingTile.onStitchingModeChanged(node.indexStitchingMode)
@@ -193,7 +197,7 @@ export class Terrain extends THREE.Group {
             }
             this._loadingTileIds.add(node.id);
             const useDemTexture = !this._tweaks.enableQuadTreeVisualization
-            TerrainTileManager.requestTerrainTileForNode(node, this._tweaks.anisotropy, this._tileSize, this._tweaks.wireframe, useDemTexture, this._tweaks.enableStitchingColor).then((tile) => {
+            TerrainTileManager.requestTerrainTileForNode(node, this._tweaks.anisotropy, this._tileSize, this._tweaks.wireframe, useDemTexture, this._tweaks.enableStitchingColor, this._tweaks.enableBoxHelper).then((tile) => {
                 this._loadingTileIds.delete(node.id);
                 if (!tile) {
                     console.error(`Terrain: Failed to get tile for node ${node.id}`)
@@ -250,6 +254,14 @@ export class Terrain extends THREE.Group {
         }).on("change", (e) => {
             for (const tile of this._terrainTiles) {
                 tile.enableStitchingColor(e.value)
+            }
+        })
+
+        folder.addBinding(this._tweaks, "enableBoxHelper", {
+            label: "Enable Box Helper"
+        }).on("change", (e) => {
+            for (const tile of this._terrainTiles) {
+                tile.enableBoxHelper(e.value)
             }
         })
 
