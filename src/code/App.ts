@@ -73,8 +73,6 @@ export class App {
         this._renderer = new THREE.WebGLRenderer({
             antialias: true,
             canvas: canvas,
-            // Logarithmic Depth Buffer helps prevent z-fighting issues in large scenes
-            logarithmicDepthBuffer: true,
         })
 
         this._renderer.setSize(window.innerWidth, window.innerHeight)

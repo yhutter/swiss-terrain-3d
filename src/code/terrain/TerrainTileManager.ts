@@ -11,7 +11,7 @@ export class TerrainTileManager {
     private static _terrainTileCache: TerrainTile[] = [];
 
 
-    public static get terrainMetadata(): TerrainMetadata | null {
+    static get terrainMetadata(): TerrainMetadata | null {
         return this._terrainMetadata;
     }
 
@@ -19,7 +19,14 @@ export class TerrainTileManager {
         TerrainTileManager._terrainMetadata = await TerrainMetadataParser.parseFromJson(metadataPath);
     }
 
-    static async requestTerrainTileForNode(node: QuadTreeNode, anisotropy: number, resolution: number, wireframe: boolean, shouldUseDemTexture: boolean): Promise<TerrainTile | null> {
+    static removeTileFromCache(tile: TerrainTile) {
+        const index = this._terrainTileCache.indexOf(tile);
+        if (index > -1) {
+            this._terrainTileCache.splice(index, 1);
+        }
+    }
+
+    static async requestTerrainTileForNode(node: QuadTreeNode, anisotropy: number, resolution: number, wireframe: boolean, shouldUseDemTexture: boolean, enableStitchingColor: boolean): Promise<TerrainTile | null> {
 
         if (TerrainTileManager._terrainMetadata === null) {
             console.warn("TerrainTileManager: Terrain metadata not initialized.");
@@ -27,7 +34,7 @@ export class TerrainTileManager {
         }
 
         // See if we have it in the cache
-        const existingTile = this._terrainTileCache.find(t => t.id === node.id);
+        const existingTile = this._terrainTileCache.find(t => t.identifier === node.id);
         if (existingTile) {
             return existingTile;
         }
@@ -59,6 +66,7 @@ export class TerrainTileManager {
             demTexturePath: terrainTileInfo.demImagePath,
             wireframe: wireframe,
             shouldUseDemTexture: shouldUseDemTexture,
+            enableStitchingColor: enableStitchingColor,
             minHeightScale: TerrainTileManager._terrainMetadata.globalMinElevation,
             maxHeightScale: TerrainTileManager._terrainMetadata.globalMaxElevation,
             stitchingMode: node.indexStitchingMode,

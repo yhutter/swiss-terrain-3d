@@ -4,7 +4,6 @@ import { TerrainTile } from "./TerrainTile";
 import { TerrainMetadata } from "./TerrainMetadata";
 import { TerrainTileManager } from "./TerrainTileManager";
 import { QuadTree } from "../QuadTree/QuadTree";
-import { OrbitControls } from "three/examples/jsm/Addons.js"
 import { QuadTreeNode } from "../QuadTree/QuadTreeNode";
 import { GeometryGenerator } from "../Utils/GeometryGenerator";
 import { IndexStitchingMode } from "../Utils/IndexStitchingMode";
@@ -19,6 +18,7 @@ export class Terrain extends THREE.Group {
         wireframe: false,
         anisotropy: 16,
         enableQuadTreeVisualization: false,
+        enableStitchingColor: true,
         northStitchingColor: ColorGenerator.colorForSitchingMode.get(IndexStitchingMode.North) || ColorGenerator.white,
         eastStitchingColor: ColorGenerator.colorForSitchingMode.get(IndexStitchingMode.East) || ColorGenerator.white,
         southStitchingColor: ColorGenerator.colorForSitchingMode.get(IndexStitchingMode.South) || ColorGenerator.white,
@@ -34,7 +34,6 @@ export class Terrain extends THREE.Group {
 
     private _terrainTiles: TerrainTile[] = []
     private _metadata: TerrainMetadata | null = null
-    private _shouldUseDemTexture: boolean = false
     private _camera: THREE.PerspectiveCamera
     private _cameraQuadTreeVisualization: THREE.OrthographicCamera
     private _cameraQuadTreeVisualizationFrustumSize = 1
@@ -84,7 +83,9 @@ export class Terrain extends THREE.Group {
 
         const aspect = App.instance.aspect
         // TODO: Calculate far based on terrain size
-        this._camera = new THREE.PerspectiveCamera(70, aspect, 0.01, 25000)
+        const near = 1
+        const far = 25000
+        this._camera = new THREE.PerspectiveCamera(70, aspect, near, far)
 
         this._cameraQuadTreeVisualization = new THREE.OrthographicCamera(
             this._cameraQuadTreeVisualizationFrustumSize * aspect / -2,
@@ -165,28 +166,25 @@ export class Terrain extends THREE.Group {
             this._cameraQuadTreeVisualization.position.z = this._cameraPosition.z
         }
 
-        // Figure out which tiles we can remove, e.g. tiles that are not in the quadTreeNodes.
+        // Figure out which tiles we can remove, e.g. tiles that are not in the Quad Tree Nodes.
         for (const tile of this._terrainTiles) {
-            const foundNode = quadTreeNodes.find(node => node.id === tile.id)
+            const foundNode = quadTreeNodes.find(node => node.id === tile.identifier)
             if (!foundNode) {
                 // Remove tile
-                if (tile.mesh) {
-                    this.remove(tile.mesh)
-                }
-                if (tile.lineMesh) {
-                    this.remove(tile.lineMesh)
-                }
                 const tileIndex = this._terrainTiles.indexOf(tile)
                 this._terrainTiles.splice(tileIndex, 1)
+                this.remove(tile)
+                TerrainTileManager.removeTileFromCache(tile)
                 tile.dispose()
             }
         }
 
         for (const node of quadTreeNodes) {
-            const existingTile = this._terrainTiles.find(tile => tile.id === node.id)
+            const existingTile = this._terrainTiles.find(tile => tile.identifier === node.id)
             if (existingTile) {
-                // Keep existing tile in sync with tweaks
-                existingTile.useDemTexture = this._shouldUseDemTexture
+                // Keep in sync with tweaks
+                existingTile.enableStitchingColor(this._tweaks.enableStitchingColor)
+                existingTile.useDemTexture(!this._tweaks.enableQuadTreeVisualization)
                 existingTile.onStitchingModeChanged(node.indexStitchingMode)
                 continue
             }
@@ -194,41 +192,24 @@ export class Terrain extends THREE.Group {
                 continue
             }
             this._loadingTileIds.add(node.id);
-            TerrainTileManager.requestTerrainTileForNode(node, this._tweaks.anisotropy, this._tileSize, this._tweaks.wireframe, this._shouldUseDemTexture).then((tile) => {
+            const useDemTexture = !this._tweaks.enableQuadTreeVisualization
+            TerrainTileManager.requestTerrainTileForNode(node, this._tweaks.anisotropy, this._tileSize, this._tweaks.wireframe, useDemTexture, this._tweaks.enableStitchingColor).then((tile) => {
                 this._loadingTileIds.delete(node.id);
                 if (!tile) {
                     console.error(`Terrain: Failed to get tile for node ${node.id}`)
                     return
                 }
                 this._terrainTiles.push(tile)
-                if (tile.mesh) {
-                    this.add(tile.mesh)
-                }
-                if (tile.lineMesh) {
-                    this.add(tile.lineMesh)
-                }
+                this.add(tile)
             })
         }
 
     }
 
     private toggleQuadTreeVisualization(enabled: boolean): void {
-        this._shouldUseDemTexture = !enabled
-        if (enabled) {
-            for (const tile of this._terrainTiles) {
-                if (tile.lineMesh) {
-                    tile.lineMesh.visible = true
-                    tile.useDemTexture = this._shouldUseDemTexture
-                }
-            }
-        }
-        else {
-            for (const tile of this._terrainTiles) {
-                if (tile.lineMesh) {
-                    tile.lineMesh.visible = false
-                    tile.useDemTexture = this._shouldUseDemTexture
-                }
-            }
+        const useDemTexture = !enabled
+        for (const tile of this._terrainTiles) {
+            tile.useDemTexture(useDemTexture)
         }
     }
 
@@ -246,10 +227,7 @@ export class Terrain extends THREE.Group {
             step: 1,
         }).on("change", (e) => {
             for (const tile of this._terrainTiles) {
-                if (tile.dopTexture) {
-                    tile.dopTexture.anisotropy = e.value
-                    tile.dopTexture.needsUpdate = true
-                }
+                tile.setAnisotropy(e.value)
             }
         })
 
@@ -257,9 +235,7 @@ export class Terrain extends THREE.Group {
             label: "Wireframe",
         }).on("change", (e) => {
             for (const tile of this._terrainTiles) {
-                if (tile.material) {
-                    tile.material.wireframe = e.value
-                }
+                tile.setWireframe(e.value)
             }
         })
 
@@ -267,6 +243,14 @@ export class Terrain extends THREE.Group {
             label: "Enable QuadTree Visualization"
         }).on("change", (e) => {
             this.toggleQuadTreeVisualization(e.value)
+        })
+
+        folder.addBinding(this._tweaks, "enableStitchingColor", {
+            label: "Enable Stitching Color"
+        }).on("change", (e) => {
+            for (const tile of this._terrainTiles) {
+                tile.enableStitchingColor(e.value)
+            }
         })
 
         const stitchingFolder = App.instance.pane.addFolder({
