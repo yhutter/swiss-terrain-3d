@@ -152,6 +152,12 @@ export class App {
             this._renderer.toneMapping = e.value
         })
 
+        this._tweaksFolder.addBinding(this._tweaks, "showStats", {
+            label: "Show Stats",
+        }).on("change", (e) => {
+            this._stats.dom.style.display = e.value ? "block" : "none"
+        })
+
     }
 
     private onResize(): void {
