@@ -1,5 +1,5 @@
 import { IndexStitchingMode } from "./IndexStitchingMode";
-import * as THREE from 'three';
+import * as THREE from 'three/webgpu';
 
 export class ColorGenerator {
     static readonly white: THREE.Color = new THREE.Color(1, 1, 1);

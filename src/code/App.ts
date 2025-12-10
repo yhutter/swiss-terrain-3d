@@ -1,5 +1,5 @@
 import { HDRLoader } from "three/examples/jsm/Addons.js"
-import * as THREE from "three"
+import * as THREE from "three/webgpu"
 import { Pane, FolderApi } from "tweakpane"
 import { Terrain } from "./Terrain/Terrain"
 import Stats from "stats-gl";
@@ -11,7 +11,7 @@ export class App {
     // private _renderScale = 0.001
     private _renderScale = 1
 
-    private _renderer: THREE.WebGLRenderer
+    private _renderer: THREE.WebGPURenderer
     private _scene: THREE.Scene
     private _clock: THREE.Clock
     private _pane: Pane
@@ -69,7 +69,7 @@ export class App {
         return this._scene
     }
 
-    get renderer(): THREE.WebGLRenderer {
+    get renderer(): THREE.WebGPURenderer {
         return this._renderer
     }
 
@@ -82,13 +82,8 @@ export class App {
     }
 
     constructor() {
-        const canvas = document.getElementById("app") as HTMLCanvasElement
-        if (!canvas) {
-            console.error("No canvas element with id 'app' found!")
-        }
-        this._renderer = new THREE.WebGLRenderer({
+        this._renderer = new THREE.WebGPURenderer({
             antialias: true,
-            canvas: canvas,
         })
 
         this._renderer.setSize(window.innerWidth, window.innerHeight)
@@ -97,6 +92,7 @@ export class App {
         this._renderer.setPixelRatio(pixelRatio)
         this._renderer.setClearColor(this._tweaks.background)
         this._renderer.toneMapping = this._tweaks.toneMapping
+        document.body.appendChild(this._renderer.domElement)
 
         this._hdrLoader = new HDRLoader()
 
@@ -127,7 +123,7 @@ export class App {
 
         window.addEventListener("resize", () => this.onResize())
         this.onResize()
-        this.render()
+        this._renderer.setAnimationLoop(() => this.tick())
     }
 
     private async setupHDREnvironment(): Promise<void> {
@@ -173,14 +169,12 @@ export class App {
 
     }
 
-    private render() {
+    private tick() {
         this._stats.begin()
         this.update()
         const camera = this._terrain!.activeCamera
         this._renderer.render(this._scene, camera)
         this._stats.end()
         this._stats.update();
-
-        window.requestAnimationFrame(() => this.render())
     }
 }

@@ -1,7 +1,5 @@
-import * as THREE from "three"
-import vertexShader from '../../static/shaders/terrain.vert.glsl'
-import fragmentShader from '../../static/shaders/terrain.frag.glsl'
-import CustomShaderMaterial from "three-custom-shader-material/vanilla";
+import * as THREE from "three/webgpu"
+import { uniform, Fn, vec4, vec3, texture, uv, mix, positionGeometry, If, bool } from "three/tsl"
 
 import { TerrainTileParams } from './TerrainTileParams';
 import { GeometryGenerator } from '../Utils/GeometryGenerator';
@@ -13,12 +11,35 @@ export class TerrainTile extends THREE.Group {
     private _identifier: string
     private _mesh: THREE.Mesh | null = null
     private _lineMesh: THREE.LineSegments | null = null
-    private _material: CustomShaderMaterial | null = null
+    private _material: THREE.MeshStandardNodeMaterial | null = null
     private _demTexture: THREE.Texture | null = null
     private _dopTexture: THREE.Texture | null = null
     private _stitchingMode: IndexStitchingMode = IndexStitchingMode.Full
     private _boxHelper: THREE.BoxHelper | null = null
     private _params: TerrainTileParams;
+    private _uUseDemTexture = uniform(true);
+    private _uTintColor = uniform(new THREE.Color(1, 1, 1));
+    private _uDopTexture = uniform<THREE.Texture | null>(null);
+    private _uDemTexture = uniform<THREE.Texture | null>(null);
+    private _uHeightScaleMin = uniform(0.0);
+    private _uHeightScaleMax = uniform(1.0);
+
+    private readonly _positionNode = Fn(() => {
+        let finalPosition = vec3(0)
+        If(this._uUseDemTexture, () => {
+            const height = texture(this._uDemTexture.value!, uv()).r
+            const normalizedHeight = mix(this._uHeightScaleMin, this._uHeightScaleMax, height)
+            finalPosition.assign(positionGeometry.add(vec3(0, normalizedHeight, 0)))
+        }).Else(() => {
+            finalPosition.assign(positionGeometry)
+        })
+        return finalPosition
+    })
+
+    private readonly _colorNode = Fn(() => {
+        const dopColor = texture(this._uDopTexture.value!, uv())
+        return vec4(dopColor.mul(this._uTintColor).rgb, dopColor.a)
+    })
 
 
     get identifier(): string {
@@ -30,7 +51,7 @@ export class TerrainTile extends THREE.Group {
             this._lineMesh.visible = !value
         }
         if (this._material) {
-            this._material.uniforms.uUseDemTexture.value = value
+            this._uUseDemTexture.value = value;
         }
     }
 
@@ -44,9 +65,9 @@ export class TerrainTile extends THREE.Group {
         if (this._material) {
             if (value) {
                 const tintColor = ColorGenerator.colorForSitchingMode.get(this._stitchingMode) || new THREE.Color(1, 1, 1)
-                this._material.uniforms.uTintColor.value.copy(tintColor);
+                this._uTintColor.value.copy(tintColor);
             } else {
-                this._material.uniforms.uTintColor.value.set(1, 1, 1);
+                this._uTintColor.value.set(1, 1, 1);
             }
         }
     }
@@ -78,7 +99,7 @@ export class TerrainTile extends THREE.Group {
 
         const tintColor = ColorGenerator.colorForSitchingMode.get(this._stitchingMode) || new THREE.Color(1, 1, 1)
         if (this._material) {
-            this._material.uniforms.uTintColor.value.copy(tintColor);
+            this._uTintColor.value.copy(tintColor);
         }
     }
 
@@ -134,22 +155,34 @@ export class TerrainTile extends THREE.Group {
         demTexture.minFilter = THREE.LinearFilter
         demTexture.magFilter = THREE.LinearFilter
         terrainTile._demTexture = demTexture
-
-        terrainTile._material = new CustomShaderMaterial({
-            baseMaterial: new THREE.MeshStandardMaterial(),
-            vertexShader: vertexShader,
-            fragmentShader: fragmentShader,
-            uniforms: {
-                uDopTexture: { value: terrainTile._dopTexture },
-                uTintColor: { value: new THREE.Color(1, 1, 1) },
-                uDemTexture: { value: terrainTile._demTexture },
-                uUseDemTexture: { value: params.shouldUseDemTexture },
-                uHeightScaleMin: { value: params.minHeightScale },
-                uHeightScaleMax: { value: params.maxHeightScale },
-            },
+        terrainTile._material = new THREE.MeshStandardNodeMaterial({
             side: THREE.DoubleSide,
             wireframe: wireframe,
+            positionNode: terrainTile._positionNode(),
+            colorNode: terrainTile._colorNode(),
         })
+
+        terrainTile._uDopTexture.value = terrainTile._dopTexture;
+        terrainTile._uDemTexture.value = terrainTile._demTexture;
+        terrainTile._uUseDemTexture.value = params.shouldUseDemTexture;
+        terrainTile._uHeightScaleMin.value = params.minHeightScale;
+        terrainTile._uHeightScaleMax.value = params.maxHeightScale;
+
+        // terrainTile._material = new CustomShaderMaterial({
+        //     baseMaterial: new THREE.MeshStandardMaterial(),
+        //     vertexShader: vertexShader,
+        //     fragmentShader: fragmentShader,
+        //     uniforms: {
+        //         uDopTexture: { value: terrainTile._dopTexture },
+        //         uTintColor: { value: new THREE.Color(1, 1, 1) },
+        //         uDemTexture: { value: terrainTile._demTexture },
+        //         uUseDemTexture: { value: params.shouldUseDemTexture },
+        //         uHeightScaleMin: { value: params.minHeightScale },
+        //         uHeightScaleMax: { value: params.maxHeightScale },
+        //     },
+        //     side: THREE.DoubleSide,
+        //     wireframe: wireframe,
+        // })
 
         terrainTile._mesh = new THREE.Mesh(geo, terrainTile._material)
         terrainTile.add(terrainTile._mesh)

@@ -1,4 +1,4 @@
-import * as THREE from "three"
+import * as THREE from "three/webgpu"
 import { App } from '../App';
 import { TerrainTile } from "./TerrainTile";
 import { TerrainMetadata } from "./TerrainMetadata";
