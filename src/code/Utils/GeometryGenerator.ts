@@ -5,11 +5,15 @@ export class GeometryGenerator {
 
     private static _indexBuffersForStitchingModes: Map<IndexStitchingMode, THREE.BufferAttribute> = new Map();
 
-    static intitializeIndexBufferForStitchingModes(size: number) {
+    private static readonly TILE_SIZE = 33
+
+    private static _geometryCache: Map<string, THREE.BufferGeometry> = new Map();
+
+    static intitializeIndexBufferForStitchingModes() {
         for (const modeKey in IndexStitchingMode) {
             const mode = Number(modeKey) as IndexStitchingMode;
             if (!isNaN(mode)) {
-                const indices = GeometryGenerator.generateIndexBufferForStitchingMode(mode, size);
+                const indices = GeometryGenerator.generateIndexBufferForStitchingMode(mode, this.TILE_SIZE);
                 const indexAttribute = new THREE.BufferAttribute(new Uint32Array(indices), 1);
                 GeometryGenerator._indexBuffersForStitchingModes.set(mode, indexAttribute);
             }
@@ -20,9 +24,15 @@ export class GeometryGenerator {
         return GeometryGenerator._indexBuffersForStitchingModes.get(mode);
     }
 
-    static createRegularGridGeometry(resolution: number, size: number, indexStitchingMode = IndexStitchingMode.Full): THREE.BufferGeometry {
+    static createRegularGridGeometry(size: number, indexStitchingMode = IndexStitchingMode.Full): THREE.BufferGeometry {
         if (GeometryGenerator._indexBuffersForStitchingModes.size === 0) {
             throw new Error("GeometryGenerator: Index buffers for stitching modes have not been initialized. Call intitializeIndexBufferForStitchingModes first.");
+        }
+
+        const geometryId = GeometryGenerator.generateGeometryId(size, indexStitchingMode);
+        if (GeometryGenerator._geometryCache.has(geometryId)) {
+            console.log(`GeometryGenerator: Reusing cached geometry for id ${geometryId}`);
+            return GeometryGenerator._geometryCache.get(geometryId)!.clone();
         }
         const positions: number[] = [];
         const uvs: number[] = [];
@@ -35,7 +45,7 @@ export class GeometryGenerator {
         const halfSize = size / 2;
 
         // We subdivide each "logical" quad into a 2x2 grid:
-        const gridRes = resolution * 2;
+        const gridRes = this.TILE_SIZE * 2;
         const step = size / gridRes;
 
 
@@ -55,7 +65,12 @@ export class GeometryGenerator {
         geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
         geometry.setIndex(indexBuffer);
         geometry.computeVertexNormals();
+        GeometryGenerator._geometryCache.set(geometryId, geometry.clone());
         return geometry;
+    }
+
+    private static generateGeometryId(size: number, indexStitchingMode: IndexStitchingMode): string {
+        return `size_${size}_mode_${IndexStitchingMode[indexStitchingMode]}`;
     }
 
     private static generateIndexBufferForStitchingModeNorthEdge(gridRes: number, x: number, y: number): number[] {

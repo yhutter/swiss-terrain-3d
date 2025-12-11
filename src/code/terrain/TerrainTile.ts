@@ -128,12 +128,10 @@ export class TerrainTile extends THREE.Group {
 
     static async createFromParams(params: TerrainTileParams): Promise<TerrainTile> {
         const terrainTile = new TerrainTile(params)
-        const resolution = params.resolution
         const wireframe = params.wireframe
         const size = params.size
 
         const geo = GeometryGenerator.createRegularGridGeometry(
-            resolution,
             size,
             params.stitchingMode
         )

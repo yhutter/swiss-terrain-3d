@@ -12,8 +12,6 @@ import { TerrainCameraControls } from "./TerrainCameraControls";
 
 export class Terrain extends THREE.Group {
 
-    private _tileSize: number = 33
-
     private _tweaks = {
         wireframe: false,
         anisotropy: 16,
@@ -95,7 +93,7 @@ export class Terrain extends THREE.Group {
     }
 
     async initialize(): Promise<void> {
-        GeometryGenerator.intitializeIndexBufferForStitchingModes(this._tileSize)
+        GeometryGenerator.intitializeIndexBufferForStitchingModes()
         await TerrainTileManager.initializeFromMetadata(this._terrainMetadataPath)
         this._metadata = TerrainTileManager.terrainMetadata
         if (!this._metadata) {
@@ -198,7 +196,7 @@ export class Terrain extends THREE.Group {
             // Add to loading queue
             this._loadingTileIds.add(node.id);
             const useDemTexture = !this._tweaks.enableQuadTreeVisualization
-            TerrainTileManager.requestTerrainTileForNode(node, this._tweaks.anisotropy, this._tileSize, this._tweaks.wireframe, useDemTexture, this._tweaks.enableStitchingColor, this._tweaks.enableBoxHelper).then((tile) => {
+            TerrainTileManager.requestTerrainTileForNode(node, this._tweaks.anisotropy, this._tweaks.wireframe, useDemTexture, this._tweaks.enableStitchingColor, this._tweaks.enableBoxHelper).then((tile) => {
                 this._loadingTileIds.delete(node.id);
                 if (!tile) {
                     console.error(`Terrain: Failed to get tile for node ${node.id}`)
@@ -226,7 +224,6 @@ export class Terrain extends THREE.Group {
         const tileIndex = this._terrainTiles.indexOf(tile)
         this._terrainTiles.splice(tileIndex, 1)
         this.remove(tile)
-        TerrainTileManager.removeTileFromCache(tile)
         tile.dispose()
     }
 

@@ -1,3 +1,4 @@
+import * as THREE from "three/webgpu"
 import { TerrainMetadata } from "./TerrainMetadata";
 import { TerrainMetadataParser } from "./TerrainMetadataParser";
 import { TerrainLevelMetadata } from "./TerrainLevelMetadata";
@@ -8,7 +9,7 @@ import { QuadTreeNode } from "../QuadTree/QuadTreeNode";
 export class TerrainTileManager {
 
     private static _terrainMetadata: TerrainMetadata | null = null;
-    private static _terrainTileCache: TerrainTile[] = [];
+    private static _terrainTileGeometryCache = new Map<string, THREE.BufferGeometry>();
 
 
     static get terrainMetadata(): TerrainMetadata | null {
@@ -19,26 +20,9 @@ export class TerrainTileManager {
         TerrainTileManager._terrainMetadata = await TerrainMetadataParser.parseFromJson(metadataPath);
     }
 
-    static removeTileFromCache(tile: TerrainTile) {
-        const index = this._terrainTileCache.indexOf(tile);
-        if (index > -1) {
-            this._terrainTileCache.splice(index, 1);
-        }
-    }
-
-    static async requestTerrainTileForNode(node: QuadTreeNode, anisotropy: number, resolution: number, wireframe: boolean, shouldUseDemTexture: boolean, enableStitchingColor: boolean, enableBoxHelper: boolean): Promise<TerrainTile | null> {
+    static async requestTerrainTileForNode(node: QuadTreeNode, anisotropy: number, wireframe: boolean, shouldUseDemTexture: boolean, enableStitchingColor: boolean, enableBoxHelper: boolean): Promise<TerrainTile | null> {
 
         if (TerrainTileManager._terrainMetadata === null) {
-            console.warn("TerrainTileManager: Terrain metadata not initialized.");
-            return null;
-        }
-
-        // See if we have it in the cache
-        const existingTile = this._terrainTileCache.find(t => t.identifier === node.id);
-        if (existingTile) {
-            return existingTile;
-        }
-        if (!this._terrainMetadata) {
             console.warn("TerrainTileManager: Terrain metadata not initialized.");
             return null;
         }
@@ -61,7 +45,6 @@ export class TerrainTileManager {
             bounds: node.bounds,
             size: node.size.x,
             anistropy: anisotropy,
-            resolution: resolution,
             dopTexturePath: terrainTileInfo.dopImagePath,
             demTexturePath: terrainTileInfo.demImagePath,
             wireframe: wireframe,
@@ -74,7 +57,7 @@ export class TerrainTileManager {
         };
 
         const tile = await TerrainTile.createFromParams(params);
-        this._terrainTileCache.push(tile);
+        // this._terrainTileCache.push(tile);
         return tile;
     }
 
