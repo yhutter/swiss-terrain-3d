@@ -17,6 +17,7 @@ export class TerrainTile extends THREE.Group {
     private _stitchingMode: IndexStitchingMode = IndexStitchingMode.Full
     private _boxHelper: THREE.BoxHelper | null = null
     private _params: TerrainTileParams;
+    private _enableStitchingColor: boolean = false;
     private _uUseDemTexture = uniform(true);
     private _uTintColor = uniform(new THREE.Color(1, 1, 1));
     private _uDopTexture = uniform<THREE.Texture | null>(null);
@@ -48,20 +49,33 @@ export class TerrainTile extends THREE.Group {
 
     useDemTexture(value: boolean) {
         if (this._lineMesh) {
+            if (this._lineMesh.visible === !value) {
+                return
+            }
             this._lineMesh.visible = !value
         }
         if (this._material) {
+            if (this._uUseDemTexture.value === value) {
+                return
+            }
             this._uUseDemTexture.value = value;
         }
     }
 
     enableBoxHelper(value: boolean) {
         if (this._boxHelper) {
+            if (this._boxHelper.visible === value) {
+                return
+            }
             this._boxHelper.visible = value
         }
     }
 
     enableStitchingColor(value: boolean) {
+        if (this._enableStitchingColor === value) {
+            return
+        }
+        this._enableStitchingColor = value
         if (this._material) {
             if (value) {
                 const tintColor = ColorGenerator.colorForSitchingMode.get(this._stitchingMode) || new THREE.Color(1, 1, 1)
@@ -80,6 +94,9 @@ export class TerrainTile extends THREE.Group {
 
     setWireframe(value: boolean) {
         if (this._material) {
+            if (this._material.wireframe === value) {
+                return
+            }
             this._material.wireframe = value
         }
     }

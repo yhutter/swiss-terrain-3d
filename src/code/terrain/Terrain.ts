@@ -264,7 +264,7 @@ export class Terrain extends THREE.Group {
             max: 32,
             step: 1,
         }).on("change", (e) => {
-            for (const tile of this._terrainTiles) {
+            for (const tile of this._currentActiveTiles.values()) {
                 tile.setAnisotropy(e.value)
             }
         })
@@ -272,7 +272,7 @@ export class Terrain extends THREE.Group {
         folder.addBinding(this._tweaks, "wireframe", {
             label: "Wireframe",
         }).on("change", (e) => {
-            for (const tile of this._terrainTiles) {
+            for (const tile of this._currentActiveTiles.values()) {
                 tile.setWireframe(e.value)
             }
         })
@@ -286,7 +286,7 @@ export class Terrain extends THREE.Group {
         folder.addBinding(this._tweaks, "enableStitchingColor", {
             label: "Enable Stitching Color"
         }).on("change", (e) => {
-            for (const tile of this._terrainTiles) {
+            for (const tile of this._currentActiveTiles.values()) {
                 tile.enableStitchingColor(e.value)
             }
         })
@@ -294,7 +294,7 @@ export class Terrain extends THREE.Group {
         folder.addBinding(this._tweaks, "enableBoxHelper", {
             label: "Enable Box Helper"
         }).on("change", (e) => {
-            for (const tile of this._terrainTiles) {
+            for (const tile of this._currentActiveTiles.values()) {
                 tile.enableBoxHelper(e.value)
             }
         })
