@@ -13,8 +13,8 @@ export class TerrainCameraControls {
     private _domElement: HTMLElement = document.body
 
     private _tweaks = {
-        acceleration: 950,
-        decceleration: -10,
+        acceleration: 2000,
+        decceleration: -5
     }
     private _decceleration = new THREE.Vector3(this._tweaks.decceleration, this._tweaks.decceleration, this._tweaks.decceleration)
     private _acceleration = new THREE.Vector3(this._tweaks.acceleration, this._tweaks.acceleration, this._tweaks.acceleration)

@@ -166,22 +166,6 @@ export class TerrainTile extends THREE.Group {
         terrainTile._uHeightScaleMin.value = params.minHeightScale;
         terrainTile._uHeightScaleMax.value = params.maxHeightScale;
 
-        // terrainTile._material = new CustomShaderMaterial({
-        //     baseMaterial: new THREE.MeshStandardMaterial(),
-        //     vertexShader: vertexShader,
-        //     fragmentShader: fragmentShader,
-        //     uniforms: {
-        //         uDopTexture: { value: terrainTile._dopTexture },
-        //         uTintColor: { value: new THREE.Color(1, 1, 1) },
-        //         uDemTexture: { value: terrainTile._demTexture },
-        //         uUseDemTexture: { value: params.shouldUseDemTexture },
-        //         uHeightScaleMin: { value: params.minHeightScale },
-        //         uHeightScaleMax: { value: params.maxHeightScale },
-        //     },
-        //     side: THREE.DoubleSide,
-        //     wireframe: wireframe,
-        // })
-
         terrainTile._mesh = new THREE.Mesh(geo, terrainTile._material)
         terrainTile.add(terrainTile._mesh)
         terrainTile._mesh.position.set(

@@ -31,7 +31,8 @@ export class Terrain extends THREE.Group {
     // TODO: Make these paths selectable via dropdown in Tweakpane
     private _terrainMetadataPath = "/static/data/output_tiles-chur/metadata.json"
 
-    private _terrainTiles: TerrainTile[] = []
+    private _currentActiveTiles: Map<string, TerrainTile> = new Map<string, TerrainTile>()
+    private _removedTiles: Map<string, TerrainTile> = new Map<string, TerrainTile>()
     private _metadata: TerrainMetadata | null = null
     private _camera: THREE.PerspectiveCamera
     private _cameraQuadTreeVisualization: THREE.OrthographicCamera
@@ -40,7 +41,8 @@ export class Terrain extends THREE.Group {
     private _terrainCameraControls: TerrainCameraControls
     private _loadingTileIds = new Set<string>();
     private _size: THREE.Vector2 = new THREE.Vector2(0, 0)
-    private _tilesToRemoveIds = new Set<string>();
+    private _tilesToRemoveIds = new Set<string>()
+    private readonly _reuseTiles = false
 
     get center(): THREE.Vector3 {
         if (!this._metadata) {
@@ -80,10 +82,10 @@ export class Terrain extends THREE.Group {
         super()
 
         const aspect = App.instance.aspect
-        // TODO: Calculate far based on terrain size
+        // TODO: Calculate far based on terrain size (use half terrain size)
         const near = 1
-        const far = 25000
-        this._camera = new THREE.PerspectiveCamera(45, aspect, near, far)
+        const far = 12000
+        this._camera = new THREE.PerspectiveCamera(70, aspect, near, far)
 
         this._cameraQuadTreeVisualization = new THREE.OrthographicCamera()
         this._cameraQuadTreeVisualization.near = near
@@ -167,7 +169,7 @@ export class Terrain extends THREE.Group {
         }
 
         // Figure out which tiles we can remove, e.g. tiles that are not in the Quad Tree Nodes.
-        for (const tile of this._terrainTiles) {
+        for (const tile of this._currentActiveTiles.values()) {
             const foundNode = quadTreeNodes.find(node => node.id === tile.identifier)
             if (!foundNode) {
                 // Remove tile
@@ -176,7 +178,17 @@ export class Terrain extends THREE.Group {
         }
 
         for (const node of quadTreeNodes) {
-            const existingTile = this._terrainTiles.find(tile => tile.identifier === node.id)
+            let existingTile = this._currentActiveTiles.get(node.id)
+            // See if it is in the removed tiles if so reactivate it
+            if (!existingTile && this._reuseTiles) {
+                existingTile = this._removedTiles.get(node.id)
+                if (existingTile) {
+                    existingTile.visible = true
+                    this._currentActiveTiles.set(node.id, existingTile)
+                    this._removedTiles.delete(node.id)
+                }
+            }
+
             if (existingTile) {
                 // Keep in sync with tweaks
                 existingTile.enableBoxHelper(this._tweaks.enableBoxHelper)
@@ -193,7 +205,7 @@ export class Terrain extends THREE.Group {
                 continue
             }
 
-            // Add to loading queue
+            // Add to loading queue and start loading
             this._loadingTileIds.add(node.id);
             const useDemTexture = !this._tweaks.enableQuadTreeVisualization
             TerrainTileManager.requestTerrainTileForNode(node, this._tweaks.anisotropy, this._tweaks.wireframe, useDemTexture, this._tweaks.enableStitchingColor, this._tweaks.enableBoxHelper).then((tile) => {
@@ -202,7 +214,7 @@ export class Terrain extends THREE.Group {
                     console.error(`Terrain: Failed to get tile for node ${node.id}`)
                     return
                 }
-                this._terrainTiles.push(tile)
+                this._currentActiveTiles.set(tile.identifier, tile)
                 this.add(tile)
             })
         }
@@ -210,27 +222,31 @@ export class Terrain extends THREE.Group {
         // Once we have loaded everything we remove the tiles that are no longer needed
         if (this._loadingTileIds.size === 0 && this._tilesToRemoveIds.size > 0) {
             for (const tileId of this._tilesToRemoveIds) {
-                const tile = this._terrainTiles.find(t => t.identifier === tileId)
+                const tile = this._currentActiveTiles.get(tileId)
                 if (tile) {
                     this.removeTile(tile)
                 }
             }
             this._tilesToRemoveIds.clear()
         }
-
     }
 
     private removeTile(tile: TerrainTile): void {
-        const tileIndex = this._terrainTiles.indexOf(tile)
-        this._terrainTiles.splice(tileIndex, 1)
-        this.remove(tile)
-        tile.dispose()
+        this._currentActiveTiles.delete(tile.identifier)
+        if (!this._reuseTiles) {
+            tile.dispose()
+            this.remove(tile)
+        }
+        else {
+            tile.visible = false
+            this._removedTiles.set(tile.identifier, tile)
+        }
     }
 
 
     private toggleQuadTreeVisualization(enabled: boolean): void {
         const useDemTexture = !enabled
-        for (const tile of this._terrainTiles) {
+        for (const tile of this._currentActiveTiles.values()) {
             tile.useDemTexture(useDemTexture)
         }
     }
