@@ -31,7 +31,6 @@ export class GeometryGenerator {
 
         const geometryId = GeometryGenerator.generateGeometryId(size, indexStitchingMode);
         if (GeometryGenerator._geometryCache.has(geometryId)) {
-            console.log(`GeometryGenerator: Reusing cached geometry for id ${geometryId}`);
             return GeometryGenerator._geometryCache.get(geometryId)!.clone();
         }
         const positions: number[] = [];

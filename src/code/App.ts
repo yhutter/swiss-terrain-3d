@@ -20,7 +20,7 @@ export class App {
     private _hdrLoader: HDRLoader
     private readonly _stats = new Stats({
         trackFPS: true,
-        trackGPU: false,
+        trackGPU: true,
         trackHz: false,
         trackCPT: false,
         logsPerSecond: 4,
@@ -106,6 +106,8 @@ export class App {
         this._tweaksFolder = this._pane.addFolder({ title: "Swiss Terrain 3D", expanded: true })
         document.body.appendChild(this._stats.dom);
 
+        this._stats.init(this._renderer)
+
     }
 
     async run(): Promise<void> {
@@ -170,11 +172,10 @@ export class App {
     }
 
     private tick() {
-        this._stats.begin()
         this.update()
         const camera = this._terrain!.activeCamera
         this._renderer.render(this._scene, camera)
-        this._stats.end()
+        this._renderer.resolveTimestampsAsync(THREE.TimestampQuery.RENDER)
         this._stats.update();
     }
 }
