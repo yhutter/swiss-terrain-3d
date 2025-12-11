@@ -42,6 +42,7 @@ export class Terrain extends THREE.Group {
     private _terrainCameraControls: TerrainCameraControls
     private _loadingTileIds = new Set<string>();
     private _size: THREE.Vector2 = new THREE.Vector2(0, 0)
+    private _tilesToRemoveIds = new Set<string>();
 
     get center(): THREE.Vector3 {
         if (!this._metadata) {
@@ -172,11 +173,7 @@ export class Terrain extends THREE.Group {
             const foundNode = quadTreeNodes.find(node => node.id === tile.identifier)
             if (!foundNode) {
                 // Remove tile
-                const tileIndex = this._terrainTiles.indexOf(tile)
-                this._terrainTiles.splice(tileIndex, 1)
-                this.remove(tile)
-                TerrainTileManager.removeTileFromCache(tile)
-                tile.dispose()
+                this._tilesToRemoveIds.add(tile.identifier)
             }
         }
 
@@ -192,9 +189,13 @@ export class Terrain extends THREE.Group {
                 existingTile.onStitchingModeChanged(node.indexStitchingMode)
                 continue
             }
+
+            // Already loading skip
             if (this._loadingTileIds.has(node.id)) {
                 continue
             }
+
+            // Add to loading queue
             this._loadingTileIds.add(node.id);
             const useDemTexture = !this._tweaks.enableQuadTreeVisualization
             TerrainTileManager.requestTerrainTileForNode(node, this._tweaks.anisotropy, this._tileSize, this._tweaks.wireframe, useDemTexture, this._tweaks.enableStitchingColor, this._tweaks.enableBoxHelper).then((tile) => {
@@ -208,7 +209,27 @@ export class Terrain extends THREE.Group {
             })
         }
 
+        // Once we have loaded everything we remove the tiles that are no longer needed
+        if (this._loadingTileIds.size === 0 && this._tilesToRemoveIds.size > 0) {
+            for (const tileId of this._tilesToRemoveIds) {
+                const tile = this._terrainTiles.find(t => t.identifier === tileId)
+                if (tile) {
+                    this.removeTile(tile)
+                }
+            }
+            this._tilesToRemoveIds.clear()
+        }
+
     }
+
+    private removeTile(tile: TerrainTile): void {
+        const tileIndex = this._terrainTiles.indexOf(tile)
+        this._terrainTiles.splice(tileIndex, 1)
+        this.remove(tile)
+        TerrainTileManager.removeTileFromCache(tile)
+        tile.dispose()
+    }
+
 
     private toggleQuadTreeVisualization(enabled: boolean): void {
         const useDemTexture = !enabled
