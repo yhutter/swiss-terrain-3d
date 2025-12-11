@@ -131,8 +131,6 @@ export class Terrain extends THREE.Group {
         this._cameraQuadTreeVisualization.rotation.x = -Math.PI / 2
 
         this.toggleQuadTreeVisualization(this._tweaks.enableQuadTreeVisualization)
-
-        App.instance.scene.add(this)
     }
 
     onResize(aspect: number): void {

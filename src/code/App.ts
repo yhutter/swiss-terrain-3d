@@ -1,4 +1,5 @@
 import { HDRLoader } from "three/examples/jsm/Addons.js"
+import { SkyMesh } from "three/examples/jsm/objects/SkyMesh.js"
 import * as THREE from "three/webgpu"
 import { Pane, FolderApi } from "tweakpane"
 import { Terrain } from "./Terrain/Terrain"
@@ -7,8 +8,7 @@ import Stats from "stats-gl";
 export class App {
     private _envMapPath = "/static/maps/envmap-1k.hdr"
 
-    // We receive the units in meters (for example 1000 meters). To have a more manageable scale in the 3D scene, we apply a render scale of 0.001 so that 1000 meters becomes 1 unit in the 3D scene.
-    // private _renderScale = 0.001
+    // We receive the units in meters (for example 1000 meters). Tweak this value to have a more manageable scale in the 3D scene. Basically this value maps meter to scene units.
     private _renderScale = 1
 
     private _renderer: THREE.WebGPURenderer
@@ -17,6 +17,8 @@ export class App {
     private _pane: Pane
     private _tweaksFolder: FolderApi
     private _textureLoader: THREE.TextureLoader
+    private _skyMesh: SkyMesh | null = null
+    private _sunPosition = new THREE.Vector3()
     private _hdrLoader: HDRLoader
     private readonly _stats = new Stats({
         trackFPS: true,
@@ -43,6 +45,14 @@ export class App {
         },
         toneMapping: THREE.NoToneMapping,
         showStats: true,
+        sky: {
+            turbidity: 10,
+            rayleigh: 1.25,
+            elevation: 3,
+            mieCoefficient: 0,
+            mieDirectionlG: 1,
+            azimuth: 180
+        }
     }
 
     private _terrain: Terrain | null = null
@@ -63,10 +73,6 @@ export class App {
 
     get textureLoader(): THREE.TextureLoader {
         return this._textureLoader
-    }
-
-    get scene(): THREE.Scene {
-        return this._scene
     }
 
     get renderer(): THREE.WebGPURenderer {
@@ -119,9 +125,17 @@ export class App {
             console.error("Failed to load terrain!")
             return
         }
+        this._scene.add(this._terrain)
+
+        this._skyMesh = new SkyMesh()
+        // TODO: Use the terrain size here
+        this._skyMesh.scale.setScalar(450000 * this._renderScale)
+
+        this._scene.add(this._skyMesh)
 
         this.setupHDREnvironment()
         this.setupTweaks()
+        this.onSkyTweaksChanged()
 
         window.addEventListener("resize", () => this.onResize())
         this.onResize()
@@ -156,6 +170,68 @@ export class App {
             this._stats.dom.style.display = e.value ? "block" : "none"
         })
 
+        const skyFolder = this._tweaksFolder.addFolder({
+            title: "Sky",
+            expanded: true,
+        })
+
+        skyFolder.addBinding(this._tweaks.sky, "turbidity", {
+            label: "Turbidity",
+            min: 0,
+            max: 20,
+            step: 0.1,
+        }).on("change", () => this.onSkyTweaksChanged())
+
+        skyFolder.addBinding(this._tweaks.sky, "rayleigh", {
+            label: "Rayleigh",
+            min: 0,
+            max: 4,
+            step: 0.001,
+        }).on("change", () => this.onSkyTweaksChanged())
+
+        skyFolder.addBinding(this._tweaks.sky, "elevation", {
+            label: "Elevation",
+            min: 0,
+            max: 90,
+            step: 0.1,
+        }).on("change", () => this.onSkyTweaksChanged())
+
+        skyFolder.addBinding(this._tweaks.sky, "mieCoefficient", {
+            label: "Mie Coefficient",
+            min: 0,
+            max: 0.1,
+            step: 0.001,
+        }).on("change", () => this.onSkyTweaksChanged())
+
+        skyFolder.addBinding(this._tweaks.sky, "mieDirectionlG", {
+            label: "Mie Directional G",
+            min: 0,
+            max: 1,
+            step: 0.001,
+        }).on("change", () => this.onSkyTweaksChanged())
+
+        skyFolder.addBinding(this._tweaks.sky, "azimuth", {
+            label: "Azimuth",
+            min: -180,
+            max: 180,
+            step: 0.1,
+        }).on("change", () => this.onSkyTweaksChanged())
+
+    }
+
+    private onSkyTweaksChanged(): void {
+        if (!this._skyMesh) return
+
+        this._skyMesh.turbidity.value = this._tweaks.sky.turbidity
+        this._skyMesh.rayleigh.value = this._tweaks.sky.rayleigh
+        this._skyMesh.mieCoefficient.value = this._tweaks.sky.mieCoefficient
+        this._skyMesh.mieDirectionalG.value = this._tweaks.sky.mieDirectionlG
+
+        const phi = THREE.MathUtils.degToRad(90 - this._tweaks.sky.elevation)
+        const theta = THREE.MathUtils.degToRad(this._tweaks.sky.azimuth)
+
+        this._sunPosition.setFromSphericalCoords(1, phi, theta)
+        this._skyMesh.sunPosition.value.copy(this._sunPosition)
     }
 
     private onResize(): void {
