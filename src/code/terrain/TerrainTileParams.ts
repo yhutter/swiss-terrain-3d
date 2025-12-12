@@ -3,6 +3,7 @@ import * as THREE from 'three';
 
 export type TerrainTileParams = {
     id: string, // unique identifier for the tile consists of lod level and x/z position (which is the center of the plane)
+    level: number,
     xPos: number,
     zPos: number,
     size: number,
@@ -12,8 +13,9 @@ export type TerrainTileParams = {
     demTexturePath: string,
     wireframe: boolean,
     shouldUseDemTexture: boolean,
-    enableStitchingColor: boolean,
     enableBoxHelper: boolean,
+    enableLineMesh: boolean,
+    enableStichingColor: boolean,
     minHeightScale: number,
     maxHeightScale: number,
     stitchingMode: IndexStitchingMode

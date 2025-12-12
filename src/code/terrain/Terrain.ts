@@ -6,8 +6,6 @@ import { TerrainTileManager } from "./TerrainTileManager";
 import { QuadTree } from "../QuadTree/QuadTree";
 import { QuadTreeNode } from "../QuadTree/QuadTreeNode";
 import { GeometryGenerator } from "../Utils/GeometryGenerator";
-import { IndexStitchingMode } from "../Utils/IndexStitchingMode";
-import { ColorGenerator } from "../Utils/ColorGenerator";
 import { TerrainCameraControls } from "./TerrainCameraControls";
 
 export class Terrain extends THREE.Group {
@@ -15,17 +13,11 @@ export class Terrain extends THREE.Group {
     private _tweaks = {
         wireframe: false,
         anisotropy: 16,
-        enableQuadTreeVisualization: false,
+        switchToOrtographicCamera: false,
+        enableDemTexture: true,
+        enableLineMesh: false,
+        enableStitchingColor: false,
         enableBoxHelper: false,
-        enableStitchingColor: true,
-        northStitchingColor: ColorGenerator.colorForSitchingMode.get(IndexStitchingMode.North) || ColorGenerator.white,
-        eastStitchingColor: ColorGenerator.colorForSitchingMode.get(IndexStitchingMode.East) || ColorGenerator.white,
-        southStitchingColor: ColorGenerator.colorForSitchingMode.get(IndexStitchingMode.South) || ColorGenerator.white,
-        westStitchingColor: ColorGenerator.colorForSitchingMode.get(IndexStitchingMode.West) || ColorGenerator.white,
-        northEastStitchingColor: ColorGenerator.colorForSitchingMode.get(IndexStitchingMode.NorthEast) || ColorGenerator.white,
-        southEastStitchingColor: ColorGenerator.colorForSitchingMode.get(IndexStitchingMode.SouthEast) || ColorGenerator.white,
-        southWestStitchingColor: ColorGenerator.colorForSitchingMode.get(IndexStitchingMode.SouthWest) || ColorGenerator.white,
-        northWestStitchingColor: ColorGenerator.colorForSitchingMode.get(IndexStitchingMode.NorthWest) || ColorGenerator.white,
     }
 
     // TODO: Make these paths selectable via dropdown in Tweakpane
@@ -72,7 +64,7 @@ export class Terrain extends THREE.Group {
     }
 
     get activeCamera(): THREE.PerspectiveCamera | THREE.OrthographicCamera {
-        if (this._tweaks.enableQuadTreeVisualization) {
+        if (this._tweaks.switchToOrtographicCamera) {
             return this._cameraQuadTreeVisualization
         }
         return this._camera
@@ -129,8 +121,6 @@ export class Terrain extends THREE.Group {
         );
 
         this._cameraQuadTreeVisualization.rotation.x = -Math.PI / 2
-
-        this.toggleQuadTreeVisualization(this._tweaks.enableQuadTreeVisualization)
     }
 
     onResize(aspect: number): void {
@@ -161,7 +151,7 @@ export class Terrain extends THREE.Group {
 
     private updateFromQuadTreeNodes(quadTreeNodes: QuadTreeNode[]): void {
         // Track player position
-        if (this._tweaks.enableQuadTreeVisualization) {
+        if (this._tweaks.switchToOrtographicCamera) {
             this._cameraQuadTreeVisualization.position.x = this._cameraPosition.x
             this._cameraQuadTreeVisualization.position.z = this._cameraPosition.z
         }
@@ -192,8 +182,8 @@ export class Terrain extends THREE.Group {
                 existingTile.enableBoxHelper(this._tweaks.enableBoxHelper)
                 existingTile.setAnisotropy(this._tweaks.anisotropy)
                 existingTile.setWireframe(this._tweaks.wireframe)
+                existingTile.useDemTexture(this._tweaks.enableDemTexture)
                 existingTile.enableStitchingColor(this._tweaks.enableStitchingColor)
-                existingTile.useDemTexture(!this._tweaks.enableQuadTreeVisualization)
                 existingTile.onStitchingModeChanged(node.indexStitchingMode)
                 continue
             }
@@ -205,8 +195,16 @@ export class Terrain extends THREE.Group {
 
             // Add to loading queue and start loading
             this._loadingTileIds.add(node.id);
-            const useDemTexture = !this._tweaks.enableQuadTreeVisualization
-            TerrainTileManager.requestTerrainTileForNode(node, this._tweaks.anisotropy, this._tweaks.wireframe, useDemTexture, this._tweaks.enableStitchingColor, this._tweaks.enableBoxHelper).then((tile) => {
+            const useDemTexture = this._tweaks.enableDemTexture
+            TerrainTileManager.requestTerrainTileForNode(
+                node,
+                this._tweaks.anisotropy,
+                this._tweaks.wireframe,
+                useDemTexture,
+                this._tweaks.enableBoxHelper,
+                this._tweaks.enableLineMesh,
+                this._tweaks.enableStitchingColor
+            ).then((tile) => {
                 this._loadingTileIds.delete(node.id);
                 if (!tile) {
                     console.error(`Terrain: Failed to get tile for node ${node.id}`)
@@ -242,14 +240,6 @@ export class Terrain extends THREE.Group {
     }
 
 
-    private toggleQuadTreeVisualization(enabled: boolean): void {
-        const useDemTexture = !enabled
-        for (const tile of this._currentActiveTiles.values()) {
-            tile.useDemTexture(useDemTexture)
-        }
-    }
-
-
     private setupTweaks(): void {
         const folder = App.instance.pane.addFolder({
             title: 'Terrain',
@@ -275,19 +265,7 @@ export class Terrain extends THREE.Group {
             }
         })
 
-        folder.addBinding(this._tweaks, "enableQuadTreeVisualization", {
-            label: "Enable QuadTree Visualization"
-        }).on("change", (e) => {
-            this.toggleQuadTreeVisualization(e.value)
-        })
-
-        folder.addBinding(this._tweaks, "enableStitchingColor", {
-            label: "Enable Stitching Color"
-        }).on("change", (e) => {
-            for (const tile of this._currentActiveTiles.values()) {
-                tile.enableStitchingColor(e.value)
-            }
-        })
+        folder.addBinding(this._tweaks, "switchToOrtographicCamera", { label: "Switch to Ortographic Camera" })
 
         folder.addBinding(this._tweaks, "enableBoxHelper", {
             label: "Enable Box Helper"
@@ -297,57 +275,28 @@ export class Terrain extends THREE.Group {
             }
         })
 
-        const stitchingFolder = App.instance.pane.addFolder({
-            title: 'Terrain Stitching Colors',
-            expanded: true,
+        folder.addBinding(this._tweaks, "enableLineMesh", {
+            label: "Enable Line Mesh"
+        }).on("change", (e) => {
+            for (const tile of this._currentActiveTiles.values()) {
+                tile.enableLineMesh(e.value)
+            }
         })
 
-        stitchingFolder.addBinding(this._tweaks, "northStitchingColor", {
-            label: "North Color",
-            view: "color",
-            color: { type: "float" }
+        folder.addBinding(this._tweaks, "enableDemTexture", {
+            label: "Enable DEM Texture"
+        }).on("change", (e) => {
+            for (const tile of this._currentActiveTiles.values()) {
+                tile.useDemTexture(e.value)
+            }
         })
 
-        stitchingFolder.addBinding(this._tweaks, "northEastStitchingColor", {
-            label: "North East",
-            view: "color",
-            color: { type: "float" }
-        })
-
-        stitchingFolder.addBinding(this._tweaks, "northWestStitchingColor", {
-            label: "North West",
-            view: "color",
-            color: { type: "float" }
-        })
-
-        stitchingFolder.addBinding(this._tweaks, "eastStitchingColor", {
-            label: "East",
-            view: "color",
-            color: { type: "float" }
-        })
-
-        stitchingFolder.addBinding(this._tweaks, "southStitchingColor", {
-            label: "South",
-            view: "color",
-            color: { type: "float" }
-        })
-
-        stitchingFolder.addBinding(this._tweaks, "southEastStitchingColor", {
-            label: "South East",
-            view: "color",
-            color: { type: "float" }
-        })
-
-        stitchingFolder.addBinding(this._tweaks, "southWestStitchingColor", {
-            label: "South West",
-            view: "color",
-            color: { type: "float" }
-        })
-
-        stitchingFolder.addBinding(this._tweaks, "westStitchingColor", {
-            label: "West",
-            view: "color",
-            color: { type: "float" }
+        folder.addBinding(this._tweaks, "enableStitchingColor", {
+            label: "Enable Stitching Color"
+        }).on("change", (e) => {
+            for (const tile of this._currentActiveTiles.values()) {
+                tile.enableStitchingColor(e.value)
+            }
         })
     }
 }

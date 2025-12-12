@@ -1,11 +1,10 @@
 import * as THREE from "three/webgpu"
-import { uniform, Fn, vec4, vec3, texture, uv, mix, positionGeometry, If, bool } from "three/tsl"
+import { uniform, Fn, vec3, texture, uv, mix, positionGeometry, If, vec4 } from "three/tsl"
 
 import { TerrainTileParams } from './TerrainTileParams';
 import { GeometryGenerator } from '../Utils/GeometryGenerator';
 import { App } from '../App';
 import { IndexStitchingMode } from "../Utils/IndexStitchingMode";
-import { ColorGenerator } from "../Utils/ColorGenerator";
 
 export class TerrainTile extends THREE.Group {
     private _identifier: string
@@ -16,10 +15,10 @@ export class TerrainTile extends THREE.Group {
     private _dopTexture: THREE.Texture | null = null
     private _stitchingMode: IndexStitchingMode = IndexStitchingMode.Full
     private _boxHelper: THREE.BoxHelper | null = null
+    private _enableStitchingColor: boolean = false
     private _params: TerrainTileParams;
-    private _enableStitchingColor: boolean = false;
     private _uUseDemTexture = uniform(true);
-    private _uTintColor = uniform(new THREE.Color(1, 1, 1));
+    private _uTintColor = uniform(new THREE.Color(0xffffff));
     private _uDopTexture = uniform<THREE.Texture | null>(null);
     private _uDemTexture = uniform<THREE.Texture | null>(null);
     private _uHeightScaleMin = uniform(0.0);
@@ -39,7 +38,8 @@ export class TerrainTile extends THREE.Group {
 
     private readonly _colorNode = Fn(() => {
         const dopColor = texture(this._uDopTexture.value!, uv())
-        return vec4(dopColor.mul(this._uTintColor).rgb, dopColor.a)
+        const finalColor = vec4(this._uTintColor.mul(dopColor))
+        return finalColor
     })
 
 
@@ -48,18 +48,27 @@ export class TerrainTile extends THREE.Group {
     }
 
     useDemTexture(value: boolean) {
-        if (this._lineMesh) {
-            if (this._lineMesh.visible === !value) {
-                return
-            }
-            this._lineMesh.visible = !value
+        if (this._uUseDemTexture.value === value) {
+            return
         }
         if (this._material) {
-            if (this._uUseDemTexture.value === value) {
-                return
-            }
             this._uUseDemTexture.value = value;
         }
+    }
+
+    enableLineMesh(value: boolean) {
+        if (this._lineMesh) {
+            this._lineMesh.visible = value
+        }
+
+    }
+
+    enableStitchingColor(value: boolean) {
+        if (this._enableStitchingColor === value) {
+            return
+        }
+        this._enableStitchingColor = value
+        this._uTintColor.value = (this._stitchingMode == IndexStitchingMode.Full || !this._enableStitchingColor) ? new THREE.Color(0xffffff) : new THREE.Color(0xffff00)
     }
 
     enableBoxHelper(value: boolean) {
@@ -68,21 +77,6 @@ export class TerrainTile extends THREE.Group {
                 return
             }
             this._boxHelper.visible = value
-        }
-    }
-
-    enableStitchingColor(value: boolean) {
-        if (this._enableStitchingColor === value) {
-            return
-        }
-        this._enableStitchingColor = value
-        if (this._material) {
-            if (value) {
-                const tintColor = ColorGenerator.colorForSitchingMode.get(this._stitchingMode) || new THREE.Color(1, 1, 1)
-                this._uTintColor.value.copy(tintColor);
-            } else {
-                this._uTintColor.value.set(1, 1, 1);
-            }
         }
     }
 
@@ -106,18 +100,7 @@ export class TerrainTile extends THREE.Group {
             return
         }
         this._stitchingMode = mode
-
-        const indexBuffer = GeometryGenerator.getIndexBufferForStitchingMode(this._stitchingMode)
-
-        if (this._mesh && indexBuffer) {
-            this._mesh.geometry.setIndex(indexBuffer)
-            this._mesh.geometry.computeVertexNormals()
-        }
-
-        const tintColor = ColorGenerator.colorForSitchingMode.get(this._stitchingMode) || new THREE.Color(1, 1, 1)
-        if (this._material) {
-            this._uTintColor.value.copy(tintColor);
-        }
+        this.updateStitchingModeDependentResources()
     }
 
     dispose() {
@@ -166,9 +149,6 @@ export class TerrainTile extends THREE.Group {
         const demTexture = await App.instance.textureLoader.loadAsync(params.demTexturePath)
         demTexture.wrapS = THREE.ClampToEdgeWrapping
         demTexture.wrapT = THREE.ClampToEdgeWrapping
-        demTexture.generateMipmaps = true
-        demTexture.minFilter = THREE.LinearFilter
-        demTexture.magFilter = THREE.LinearFilter
         terrainTile._demTexture = demTexture
         terrainTile._material = new THREE.MeshStandardNodeMaterial({
             side: THREE.DoubleSide,
@@ -191,7 +171,6 @@ export class TerrainTile extends THREE.Group {
             params.zPos,
         )
 
-
         // Important for frustum culling
         terrainTile.recomputeBoundingSphere()
         terrainTile._boxHelper = new THREE.BoxHelper(terrainTile._mesh, 0xff0000)
@@ -199,9 +178,14 @@ export class TerrainTile extends THREE.Group {
         terrainTile.add(terrainTile._boxHelper)
 
         terrainTile._stitchingMode = params.stitchingMode
+
         terrainTile._lineMesh = terrainTile.createLineMesh(params.bounds)
-        terrainTile._lineMesh.visible = !params.shouldUseDemTexture
+        terrainTile._lineMesh.visible = params.enableLineMesh
         terrainTile.add(terrainTile._lineMesh)
+
+        terrainTile._enableStitchingColor = params.enableStichingColor
+
+        terrainTile.updateStitchingModeDependentResources()
         return terrainTile
     }
 
@@ -209,6 +193,51 @@ export class TerrainTile extends THREE.Group {
         super()
         this._params = params
         this._identifier = this._params.id
+    }
+
+    private updateStitchingModeDependentResources() {
+        this._uTintColor.value = (this._stitchingMode == IndexStitchingMode.Full || !this._enableStitchingColor) ? new THREE.Color(0xffffff) : new THREE.Color(0xffff00)
+
+        if (this._lineMesh) {
+            const colorBufferAttribute = this._lineMesh.geometry.getAttribute('color')
+            const colors = this.getVertexColorsForStitchingMode(this._stitchingMode)
+            colorBufferAttribute.array.set(colors)
+            colorBufferAttribute.needsUpdate = true;
+        }
+
+        if (this._mesh) {
+            const indexBuffer = GeometryGenerator.getIndexBufferForStitchingMode(this._stitchingMode)
+            this._mesh.geometry.setIndex(indexBuffer!)
+            this._mesh.geometry.computeVertexNormals()
+        }
+    }
+
+    private getVertexColorsForStitchingMode(stitchingMode: IndexStitchingMode): number[] {
+        const colors = []
+        const baseColor = [1, 1, 1]
+
+        const isSouthEdgeStitching = stitchingMode === IndexStitchingMode.South || stitchingMode === IndexStitchingMode.SouthEast || stitchingMode === IndexStitchingMode.SouthWest
+        const isEastEdgeStitching = stitchingMode === IndexStitchingMode.East || stitchingMode === IndexStitchingMode.NorthEast || stitchingMode === IndexStitchingMode.SouthEast
+        const isNorthEdgeStitching = stitchingMode === IndexStitchingMode.North || stitchingMode === IndexStitchingMode.NorthEast || stitchingMode === IndexStitchingMode.NorthWest
+        const isWestEdgeStitching = stitchingMode === IndexStitchingMode.West || stitchingMode === IndexStitchingMode.NorthWest || stitchingMode === IndexStitchingMode.SouthWest
+
+        // North edge
+        const northEdgeColor = isNorthEdgeStitching ? [1, 0, 0] : baseColor
+        colors.push(...northEdgeColor, ...northEdgeColor)
+
+        // East edge
+        const eastEdgeColor = isEastEdgeStitching ? [1, 0, 0] : baseColor
+        colors.push(...eastEdgeColor, ...eastEdgeColor)
+
+        // South Edge
+        const southEdgeColor = isSouthEdgeStitching ? [1, 0, 0] : baseColor
+        colors.push(...southEdgeColor, ...southEdgeColor)
+
+        // West edge
+        const westEdgeColor = isWestEdgeStitching ? [1, 0, 0] : baseColor
+        colors.push(...westEdgeColor, ...westEdgeColor)
+
+        return colors
     }
 
     private recomputeBoundingSphere() {
@@ -230,13 +259,14 @@ export class TerrainTile extends THREE.Group {
         const geometry = new THREE.BufferGeometry()
         const vertices = []
 
-        const cellMin = bounds.min;
-        const cellMax = bounds.max;
-        const minHeight = 0.0
+        const cellMin = bounds.min
+        const cellMax = bounds.max
 
-        // Insert lines for the 4 corners according to bounding box
+        const minHeight = this._params.level
+
+
         vertices.push(
-            // South edge
+            // North edge
             cellMin.x, minHeight, cellMin.y,
             cellMax.x, minHeight, cellMin.y,
 
@@ -244,7 +274,7 @@ export class TerrainTile extends THREE.Group {
             cellMax.x, minHeight, cellMin.y,
             cellMax.x, minHeight, cellMax.y,
 
-            // North edge
+            // South edge
             cellMax.x, minHeight, cellMax.y,
             cellMin.x, minHeight, cellMax.y,
 
@@ -253,10 +283,7 @@ export class TerrainTile extends THREE.Group {
             cellMin.x, minHeight, cellMin.y,
         )
 
-        const colors = []
-        for (let i = 0; i < 8; i++) {
-            colors.push(1, 1, 1)
-        }
+        const colors = this.getVertexColorsForStitchingMode(this._stitchingMode)
 
         geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3))
         geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3))

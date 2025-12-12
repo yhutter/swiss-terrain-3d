@@ -20,7 +20,14 @@ export class TerrainTileManager {
         TerrainTileManager._terrainMetadata = await TerrainMetadataParser.parseFromJson(metadataPath);
     }
 
-    static async requestTerrainTileForNode(node: QuadTreeNode, anisotropy: number, wireframe: boolean, shouldUseDemTexture: boolean, enableStitchingColor: boolean, enableBoxHelper: boolean): Promise<TerrainTile | null> {
+    static async requestTerrainTileForNode(
+        node: QuadTreeNode,
+        anisotropy: number,
+        wireframe: boolean,
+        shouldUseDemTexture: boolean,
+        enableBoxHelper: boolean,
+        enableLineMesh: boolean,
+        enableStitchingColor: boolean): Promise<TerrainTile | null> {
 
         if (TerrainTileManager._terrainMetadata === null) {
             console.warn("TerrainTileManager: Terrain metadata not initialized.");
@@ -40,6 +47,7 @@ export class TerrainTileManager {
 
         const params: TerrainTileParams = {
             id: node.id,
+            level: node.level,
             xPos: xPos,
             zPos: zPos,
             bounds: node.bounds,
@@ -49,8 +57,9 @@ export class TerrainTileManager {
             demTexturePath: terrainTileInfo.demImagePath,
             wireframe: wireframe,
             shouldUseDemTexture: shouldUseDemTexture,
-            enableStitchingColor: enableStitchingColor,
             enableBoxHelper: enableBoxHelper,
+            enableLineMesh: enableLineMesh,
+            enableStichingColor: enableStitchingColor,
             minHeightScale: TerrainTileManager._terrainMetadata.globalMinElevation,
             maxHeightScale: TerrainTileManager._terrainMetadata.globalMaxElevation,
             stitchingMode: node.indexStitchingMode,
