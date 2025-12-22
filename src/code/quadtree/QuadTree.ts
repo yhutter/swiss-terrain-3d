@@ -158,7 +158,7 @@ export class QuadTree {
     }
 
     private insertPositionRecursive(node: QuadTreeNode, position: THREE.Vector2): void {
-        const distanceToNode = this.distanceToNode(node, position);
+        const distanceToNode = node.center.distanceTo(position);
 
         // Determine if we need to subdivide
         const distanceFactor = 2
@@ -205,10 +205,6 @@ export class QuadTree {
         });
 
         return children;
-    }
-
-    private distanceToNode(child: QuadTreeNode, position: THREE.Vector2): number {
-        return child.center.distanceTo(position);
     }
 
     private getChildrenRecursive(node: QuadTreeNode): QuadTreeNode[] {
