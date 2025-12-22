@@ -1,7 +1,7 @@
 {
     "chur": {
-        "use_patching": true,
-        "skip_download": true,
+        "detect_missing": false,
+        "skip_download": false,
         "dem_csv_path": "./data/chur/ch.swisstopo.swissalti3d.csv",
         "dop_csv_path": "./data/chur/ch.swisstopo.swissimage.csv",
         "dem_download_dir": "./data/swiss-alti3d-chur",
@@ -10,8 +10,8 @@
         "tile_size_px": 500
     },
     "sargans": {
-        "use_patching": true,
-        "skip_download": true,
+        "detect_missing": true,
+        "skip_download": false,
         "dem_csv_path": "./data/sargans/ch.swisstopo.swissalti3d.csv",
         "dop_csv_path": "./data/sargans/ch.swisstopo.swissimage.csv",
         "dem_download_dir": "./data/swiss-alti3d-sargans",
@@ -20,7 +20,7 @@
         "tile_size_px": 500
     },
     "zermatt": {
-        "use_patching": true,
+        "detect_missing": false,
         "skip_download": false,
         "dem_csv_path": "./data/zermatt/ch.swisstopo.swissalti3d.csv",
         "dop_csv_path": "./data/zermatt/ch.swisstopo.swissimage.csv",

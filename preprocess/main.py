@@ -40,7 +40,7 @@ def create_swisstopo_url(
         raise ValueError(f"Unknown type: {type}")
 
 
-def patch_swisstopo_csv(csv_path, output_csv_path, type="dem"):
+def patch_swisstopo_csv(csv_path, output_csv_path, type="dem", detect_missing=True):
     """
     Reads a SwissTopo CSV of image URLs, detects missing 1 km LV95 tiles,
     and adds URLs for the missing grid cells.
@@ -69,24 +69,25 @@ def patch_swisstopo_csv(csv_path, output_csv_path, type="dem"):
         print("[ERROR] No valid URLs found in CSV.")
         return
 
-    # Determine grid extents
-    easts = sorted({info["east"] for info in url_infos})
-    norths = sorted({info["north"] for info in url_infos})
-
-    # Iterate through east and north ranges to find missing tiles
     missings = []
-    for e in range(easts[0], easts[-1] + 1):
-        for n in range(norths[0], norths[-1] + 1):
-            # If it is missing take the years from the closest matching tiles with the same northing
-            is_missing = not any(
-                info["east"] == e and info["north"] == n for info in url_infos
-            )
-            if is_missing:
-                years = set(info["year"] for info in url_infos if info["north"] == n)
-                for year in years:
-                    missings.append((year, e, n))
+    if detect_missing:
+        # Iterate through east and north ranges to find missing tiles
+        easts = sorted({info["east"] for info in url_infos})
+        norths = sorted({info["north"] for info in url_infos})
+        for e in range(easts[0], easts[-1] + 1):
+            for n in range(norths[0], norths[-1] + 1):
+                # If it is missing take the years from the closest matching tiles with the same northing
+                is_missing = not any(
+                    info["east"] == e and info["north"] == n for info in url_infos
+                )
+                if is_missing:
+                    years = set(
+                        info["year"] for info in url_infos if info["north"] == n
+                    )
+                    for year in years:
+                        missings.append((year, e, n))
 
-    print(f"[INFO] Found missing tiles in {len(easts)}×{len(norths)} grid.")
+        print(f"[INFO] Found missing tiles in {len(easts)}×{len(norths)} grid.")
 
     new_url_infos = []
     for m in missings:
@@ -998,7 +999,6 @@ def preprocess(dem_input: str, dop_input: str, out_dir: str, chunk_px: int):
 
 
 if __name__ == "__main__":
-    use_patching = True
     config_file_path = "./preprocess-config.json"
 
     # Load parameters from json config
@@ -1016,7 +1016,7 @@ if __name__ == "__main__":
             raise RuntimeError(
                 f"Active config '{active_config_name}' not found in preprocess-config.json"
             )
-        use_patching = active_config.get("use_patching", True)
+        detect_missing = active_config.get("detect_missing", True)
         skip_download = active_config.get("skip_download", False)
         dem_csv_path = active_config.get("dem_csv_path", None)
         dop_csv_path = active_config.get("dop_csv_path", None)
@@ -1027,28 +1027,25 @@ if __name__ == "__main__":
         print("Config file found. Using the following parameters:")
         print(json.dumps(active_config, indent=2))
 
+    dem_csv_patched_path = f"{dem_csv_path}.patched"
+    print("Patching SwissALTI3D CSV for missing tiles...")
+    print("detect_missing =", detect_missing)
+    patch_swisstopo_csv(
+        dem_csv_path, dem_csv_patched_path, type="dem", detect_missing=detect_missing
+    )
+
+    dop_csv_patched_path = f"{dop_csv_path}.patched"
+    print("Patching SwissIMAGE CSV for missing tiles...")
+    patch_swisstopo_csv(
+        dop_csv_path, dop_csv_patched_path, type="dop", detect_missing=detect_missing
+    )
+
     if not skip_download:
-        if use_patching:
-            dem_csv_patched_path = f"{dem_csv_path}.patched"
-            print("Patching SwissALTI3D CSV for missing tiles...")
-            patch_swisstopo_csv(dem_csv_path, dem_csv_patched_path, type="dem")
-
         print("Downloading SwissALTI3D tiles...")
-        if use_patching:
-            download_tiles_from_csv(dem_csv_patched_path, dem_download_dir)
-        else:
-            download_tiles_from_csv(dem_csv_path, dem_download_dir)
-
-        if use_patching:
-            dop_csv_patched_path = f"{dop_csv_path}.patched"
-            print("Patching SwissIMAGE CSV for missing tiles...")
-            patch_swisstopo_csv(dop_csv_path, dop_csv_patched_path, type="dop")
+        download_tiles_from_csv(dem_csv_patched_path, dem_download_dir)
 
         print("Downloading SwissIMAGE tiles...")
-        if use_patching:
-            download_tiles_from_csv(dop_csv_patched_path, dop_download_dir)
-        else:
-            download_tiles_from_csv(dop_csv_path, dop_download_dir)
+        download_tiles_from_csv(dop_csv_patched_path, dop_download_dir)
 
     print("Starting preprocessing pipeline...")
     preprocess(dem_download_dir, dop_download_dir, output_dir, tile_size_px)
