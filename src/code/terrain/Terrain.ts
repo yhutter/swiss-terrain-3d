@@ -31,10 +31,8 @@ export class Terrain extends THREE.Group {
     private _cameraPosition: THREE.Vector3 = new THREE.Vector3(0, 0, 0)
     private _quadTree: QuadTree | null = null
     private _terrainCameraControls: TerrainCameraControls
-    private _loadingTileIds = new Set<string>();
     private _size: THREE.Vector2 = new THREE.Vector2(0, 0)
     private _tilesToRemoveIds = new Set<string>()
-    private readonly _reuseTiles = false
 
     get center(): THREE.Vector3 {
         if (!this._metadata) {
@@ -88,7 +86,9 @@ export class Terrain extends THREE.Group {
 
     async initialize(): Promise<void> {
         GeometryGenerator.intitializeIndexBufferForStitchingModes()
+        GeometryGenerator.initalizeGeometriesForStitchingModes()
         await TerrainTileManager.initializeFromMetadata(this._terrainMetadataPath)
+        await TerrainTileManager.preloadTextures()
         this._metadata = TerrainTileManager.terrainMetadata
         if (!this._metadata) {
             console.error("Terrain: Failed to load terrain metadata!")
@@ -166,21 +166,10 @@ export class Terrain extends THREE.Group {
         }
 
         for (const node of quadTreeNodes) {
-            let existingTile = this._currentActiveTiles.get(node.id)
-            // See if it is in the removed tiles if so reactivate it
-            if (!existingTile && this._reuseTiles) {
-                existingTile = this._removedTiles.get(node.id)
-                if (existingTile) {
-                    existingTile.visible = true
-                    this._currentActiveTiles.set(node.id, existingTile)
-                    this._removedTiles.delete(node.id)
-                }
-            }
-
+            const existingTile = this._currentActiveTiles.get(node.id)
             if (existingTile) {
                 // Keep in sync with tweaks
                 existingTile.enableBoxHelper(this._tweaks.enableBoxHelper)
-                existingTile.setAnisotropy(this._tweaks.anisotropy)
                 existingTile.setWireframe(this._tweaks.wireframe)
                 existingTile.useDemTexture(this._tweaks.enableDemTexture)
                 existingTile.enableStitchingColor(this._tweaks.enableStitchingColor)
@@ -188,15 +177,8 @@ export class Terrain extends THREE.Group {
                 continue
             }
 
-            // Already loading skip
-            if (this._loadingTileIds.has(node.id)) {
-                continue
-            }
-
-            // Add to loading queue and start loading
-            this._loadingTileIds.add(node.id);
             const useDemTexture = this._tweaks.enableDemTexture
-            TerrainTileManager.requestTerrainTileForNode(
+            const tile = TerrainTileManager.requestTerrainTileForNode(
                 node,
                 this._tweaks.anisotropy,
                 this._tweaks.wireframe,
@@ -204,19 +186,17 @@ export class Terrain extends THREE.Group {
                 this._tweaks.enableBoxHelper,
                 this._tweaks.enableLineMesh,
                 this._tweaks.enableStitchingColor
-            ).then((tile) => {
-                this._loadingTileIds.delete(node.id);
-                if (!tile) {
-                    console.error(`Terrain: Failed to get tile for node ${node.id}`)
-                    return
-                }
-                this._currentActiveTiles.set(tile.identifier, tile)
-                this.add(tile)
-            })
+            )
+            if (!tile) {
+                console.error(`Terrain: Failed to get tile for node ${node.id}`)
+                return
+            }
+            this._currentActiveTiles.set(tile.identifier, tile)
+            this.add(tile)
         }
 
-        // Once we have loaded everything we remove the tiles that are no longer needed
-        if (this._loadingTileIds.size === 0 && this._tilesToRemoveIds.size > 0) {
+        // Remove the tiles that are no longer needed
+        if (this._tilesToRemoveIds.size > 0) {
             for (const tileId of this._tilesToRemoveIds) {
                 const tile = this._currentActiveTiles.get(tileId)
                 if (tile) {
@@ -229,14 +209,8 @@ export class Terrain extends THREE.Group {
 
     private removeTile(tile: TerrainTile): void {
         this._currentActiveTiles.delete(tile.identifier)
-        if (!this._reuseTiles) {
-            tile.dispose()
-            this.remove(tile)
-        }
-        else {
-            tile.visible = false
-            this._removedTiles.set(tile.identifier, tile)
-        }
+        tile.dispose()
+        this.remove(tile)
     }
 
 

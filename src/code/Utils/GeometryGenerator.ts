@@ -4,10 +4,9 @@ import { IndexStitchingMode } from "./IndexStitchingMode";
 export class GeometryGenerator {
 
     private static _indexBuffersForStitchingModes: Map<IndexStitchingMode, THREE.BufferAttribute> = new Map();
+    private static _geometriesForStitchingModes: Map<IndexStitchingMode, THREE.BufferGeometry> = new Map();
 
     private static readonly TILE_SIZE = 33
-
-    private static _geometryCache: Map<string, THREE.BufferGeometry> = new Map();
 
     static intitializeIndexBufferForStitchingModes() {
         for (const modeKey in IndexStitchingMode) {
@@ -20,19 +19,31 @@ export class GeometryGenerator {
         }
     }
 
+    static initalizeGeometriesForStitchingModes() {
+        for (const modeKey in IndexStitchingMode) {
+            const mode = Number(modeKey) as IndexStitchingMode;
+            if (!isNaN(mode)) {
+                const geometry = GeometryGenerator.createRegularGridGeometry(1, mode)
+                geometry.rotateX(-Math.PI * 0.5)
+                GeometryGenerator._geometriesForStitchingModes.set(mode, geometry);
+            }
+        }
+
+    }
+
     static getIndexBufferForStitchingMode(mode: IndexStitchingMode): THREE.BufferAttribute | undefined {
         return GeometryGenerator._indexBuffersForStitchingModes.get(mode);
     }
 
-    static createRegularGridGeometry(size: number, indexStitchingMode = IndexStitchingMode.Full): THREE.BufferGeometry {
+    static getGeometryForStitchingMode(mode: IndexStitchingMode): THREE.BufferGeometry | undefined {
+        return GeometryGenerator._geometriesForStitchingModes.get(mode);
+    }
+
+    private static createRegularGridGeometry(size: number, indexStitchingMode = IndexStitchingMode.Full): THREE.BufferGeometry {
         if (GeometryGenerator._indexBuffersForStitchingModes.size === 0) {
             throw new Error("GeometryGenerator: Index buffers for stitching modes have not been initialized. Call intitializeIndexBufferForStitchingModes first.");
         }
 
-        const geometryId = GeometryGenerator.generateGeometryId(size, indexStitchingMode);
-        if (GeometryGenerator._geometryCache.has(geometryId)) {
-            return GeometryGenerator._geometryCache.get(geometryId)!.clone();
-        }
         const positions: number[] = [];
         const uvs: number[] = [];
         const indexBuffer = GeometryGenerator.getIndexBufferForStitchingMode(indexStitchingMode);
@@ -64,7 +75,6 @@ export class GeometryGenerator {
         geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
         geometry.setIndex(indexBuffer);
         geometry.computeVertexNormals();
-        GeometryGenerator._geometryCache.set(geometryId, geometry.clone());
         return geometry;
     }
 

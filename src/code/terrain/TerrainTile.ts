@@ -11,8 +11,6 @@ export class TerrainTile extends THREE.Group {
     private _mesh: THREE.Mesh | null = null
     private _lineMesh: THREE.LineSegments | null = null
     private _material: THREE.MeshStandardNodeMaterial | null = null
-    private _demTexture: THREE.Texture | null = null
-    private _dopTexture: THREE.Texture | null = null
     private _stitchingMode: IndexStitchingMode = IndexStitchingMode.Full
     private _boxHelper: THREE.BoxHelper | null = null
     private _enableStitchingColor: boolean = false
@@ -80,12 +78,6 @@ export class TerrainTile extends THREE.Group {
         }
     }
 
-    setAnisotropy(value: number) {
-        if (this._dopTexture) {
-            this._dopTexture.anisotropy = value
-        }
-    }
-
     setWireframe(value: boolean) {
         if (this._material) {
             if (this._material.wireframe === value) {
@@ -118,81 +110,47 @@ export class TerrainTile extends THREE.Group {
         if (this._material) {
             this._material.dispose()
         }
-        if (this._demTexture) {
-            this._demTexture.dispose()
-        }
-        if (this._dopTexture) {
-            this._dopTexture.dispose()
-        }
-    }
-
-    static async createFromParams(params: TerrainTileParams): Promise<TerrainTile> {
-        const terrainTile = new TerrainTile(params)
-        const wireframe = params.wireframe
-        const size = params.size
-
-        const geo = GeometryGenerator.createRegularGridGeometry(
-            size,
-            params.stitchingMode
-        )
-        geo.rotateX(-Math.PI * 0.5)
-
-        const dopTexture = await App.instance.textureLoader.loadAsync(params.dopTexturePath)
-        dopTexture.colorSpace = THREE.SRGBColorSpace
-        dopTexture.wrapS = THREE.ClampToEdgeWrapping
-        dopTexture.wrapT = THREE.ClampToEdgeWrapping
-        dopTexture.generateMipmaps = true
-        dopTexture.anisotropy = params.anistropy
-        terrainTile._dopTexture = dopTexture
-
-
-        const demTexture = await App.instance.textureLoader.loadAsync(params.demTexturePath)
-        demTexture.wrapS = THREE.ClampToEdgeWrapping
-        demTexture.wrapT = THREE.ClampToEdgeWrapping
-        terrainTile._demTexture = demTexture
-        terrainTile._material = new THREE.MeshStandardNodeMaterial({
-            side: THREE.DoubleSide,
-            wireframe: wireframe,
-            positionNode: terrainTile._positionNode(),
-            colorNode: terrainTile._colorNode(),
-        })
-
-        terrainTile._uDopTexture.value = terrainTile._dopTexture;
-        terrainTile._uDemTexture.value = terrainTile._demTexture;
-        terrainTile._uUseDemTexture.value = params.shouldUseDemTexture;
-        terrainTile._uHeightScaleMin.value = params.minHeightScale;
-        terrainTile._uHeightScaleMax.value = params.maxHeightScale;
-
-        terrainTile._mesh = new THREE.Mesh(geo, terrainTile._material)
-        terrainTile.add(terrainTile._mesh)
-        terrainTile._mesh.position.set(
-            params.xPos,
-            0,
-            params.zPos,
-        )
-
-        // Important for frustum culling
-        terrainTile.recomputeBoundingSphere()
-        terrainTile._boxHelper = new THREE.BoxHelper(terrainTile._mesh, 0xff0000)
-        terrainTile._boxHelper.visible = params.enableBoxHelper
-        terrainTile.add(terrainTile._boxHelper)
-
-        terrainTile._stitchingMode = params.stitchingMode
-
-        terrainTile._lineMesh = terrainTile.createLineMesh(params.bounds)
-        terrainTile._lineMesh.visible = params.enableLineMesh
-        terrainTile.add(terrainTile._lineMesh)
-
-        terrainTile._enableStitchingColor = params.enableStichingColor
-
-        terrainTile.updateStitchingModeDependentResources()
-        return terrainTile
     }
 
     constructor(params: TerrainTileParams) {
         super()
         this._params = params
         this._identifier = this._params.id
+        const wireframe = params.wireframe
+        const size = params.size
+        const geo = GeometryGenerator.getGeometryForStitchingMode(params.stitchingMode)
+
+        this._material = new THREE.MeshStandardNodeMaterial({
+            side: THREE.DoubleSide,
+            wireframe: wireframe,
+            positionNode: this._positionNode(),
+            colorNode: this._colorNode(),
+        })
+
+        this._uDopTexture.value = params.dopTexture;
+        this._uDemTexture.value = params.demTexture;
+        this._uUseDemTexture.value = params.shouldUseDemTexture;
+        this._uHeightScaleMin.value = params.minHeightScale;
+        this._uHeightScaleMax.value = params.maxHeightScale;
+
+        this._mesh = new THREE.Mesh(geo, this._material)
+        this._mesh.scale.set(size, 1, size)
+        this._mesh.position.set(params.xPos, 0, params.zPos)
+        this.add(this._mesh)
+
+        // Important for frustum culling
+        this.recomputeBoundingSphere()
+        this._boxHelper = new THREE.BoxHelper(this._mesh, 0xff0000)
+        this._boxHelper.visible = params.enableBoxHelper
+        this.add(this._boxHelper)
+
+        this._stitchingMode = params.stitchingMode
+
+        this._lineMesh = this.createLineMesh(params.bounds)
+        this._lineMesh.visible = params.enableLineMesh
+        this.add(this._lineMesh)
+        this._enableStitchingColor = params.enableStichingColor
+        this.updateStitchingModeDependentResources()
     }
 
     private updateStitchingModeDependentResources() {
@@ -205,10 +163,13 @@ export class TerrainTile extends THREE.Group {
             colorBufferAttribute.needsUpdate = true;
         }
 
-        if (this._mesh) {
-            const indexBuffer = GeometryGenerator.getIndexBufferForStitchingMode(this._stitchingMode)
-            this._mesh.geometry.setIndex(indexBuffer!)
-            this._mesh.geometry.computeVertexNormals()
+        if (this._mesh && this._mesh.geometry) {
+            const newGeometry = GeometryGenerator.getGeometryForStitchingMode(this._stitchingMode)
+            if (newGeometry == null) {
+                console.error("Failed to get new geometry for stitching mode:", this._stitchingMode)
+                return
+            }
+            this._mesh.geometry = newGeometry
         }
     }
 

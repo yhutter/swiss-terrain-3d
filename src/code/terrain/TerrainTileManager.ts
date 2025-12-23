@@ -10,6 +10,8 @@ export class TerrainTileManager {
 
     private static _terrainMetadata: TerrainMetadata | null = null;
     private static _terrainTileGeometryCache = new Map<string, THREE.BufferGeometry>();
+    private static _demTextureCache = new Map<string, THREE.Texture>();
+    private static _dopTextureCache = new Map<string, THREE.Texture>();
 
 
     static get terrainMetadata(): TerrainMetadata | null {
@@ -20,14 +22,45 @@ export class TerrainTileManager {
         TerrainTileManager._terrainMetadata = await TerrainMetadataParser.parseFromJson(metadataPath);
     }
 
-    static async requestTerrainTileForNode(
+    static async preloadTextures() {
+        if (this._terrainMetadata === null) {
+            console.warn("TerrainTileManager: Terrain metadata not initialized.");
+            return;
+        }
+
+        const textureLoader = new THREE.TextureLoader();
+
+        const demPromises = this._terrainMetadata.levels.map(async (level) => {
+            if (!this._demTextureCache.has(level.demImagePath)) {
+                const demTexture = await textureLoader.loadAsync(level.demImagePath);
+                demTexture.wrapS = THREE.ClampToEdgeWrapping
+                demTexture.wrapT = THREE.ClampToEdgeWrapping
+                this._demTextureCache.set(level.demImagePath, demTexture);
+            }
+        });
+
+        const dopPromises = this._terrainMetadata.levels.map(async (level) => {
+            if (!this._dopTextureCache.has(level.dopImagePath)) {
+                const dopTexture = await textureLoader.loadAsync(level.dopImagePath);
+                dopTexture.colorSpace = THREE.SRGBColorSpace
+                dopTexture.wrapS = THREE.ClampToEdgeWrapping
+                dopTexture.wrapT = THREE.ClampToEdgeWrapping
+                dopTexture.generateMipmaps = true
+                this._dopTextureCache.set(level.dopImagePath, dopTexture);
+            }
+        });
+
+        await Promise.all([...demPromises, ...dopPromises]);
+    }
+
+    static requestTerrainTileForNode(
         node: QuadTreeNode,
         anisotropy: number,
         wireframe: boolean,
         shouldUseDemTexture: boolean,
         enableBoxHelper: boolean,
         enableLineMesh: boolean,
-        enableStitchingColor: boolean): Promise<TerrainTile | null> {
+        enableStitchingColor: boolean): TerrainTile | null {
 
         if (TerrainTileManager._terrainMetadata === null) {
             console.warn("TerrainTileManager: Terrain metadata not initialized.");
@@ -44,6 +77,18 @@ export class TerrainTileManager {
         const xPos = terrainTileInfo.centerWorldSpace.x;
         const zPos = terrainTileInfo.centerWorldSpace.y;
 
+        const dopTexture = this._dopTextureCache.get(terrainTileInfo.dopImagePath);
+        if (!dopTexture) {
+            console.error(`TerrainTileManager: DOP texture not preloaded for path ${terrainTileInfo.dopImagePath}.`);
+            return null;
+        }
+
+
+        const demTexture = this._demTextureCache.get(terrainTileInfo.demImagePath);
+        if (!demTexture) {
+            console.error(`TerrainTileManager: DEM texture not preloaded for path ${terrainTileInfo.demImagePath}.`);
+            return null;
+        }
 
         const params: TerrainTileParams = {
             id: node.id,
@@ -53,8 +98,8 @@ export class TerrainTileManager {
             bounds: node.bounds,
             size: node.size.x,
             anistropy: anisotropy,
-            dopTexturePath: terrainTileInfo.dopImagePath,
-            demTexturePath: terrainTileInfo.demImagePath,
+            dopTexture: dopTexture,
+            demTexture: demTexture,
             wireframe: wireframe,
             shouldUseDemTexture: shouldUseDemTexture,
             enableBoxHelper: enableBoxHelper,
@@ -65,8 +110,7 @@ export class TerrainTileManager {
             stitchingMode: node.indexStitchingMode,
         };
 
-        const tile = await TerrainTile.createFromParams(params);
-        // this._terrainTileCache.push(tile);
+        const tile = new TerrainTile(params);
         return tile;
     }
 
