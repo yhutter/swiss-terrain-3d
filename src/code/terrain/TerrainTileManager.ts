@@ -5,11 +5,11 @@ import { TerrainLevelMetadata } from "./TerrainLevelMetadata";
 import { TerrainTile } from "./TerrainTile";
 import { TerrainTileParams } from "./TerrainTileParams";
 import { QuadTreeNode } from "../QuadTree/QuadTreeNode";
+import { App } from "../App";
 
 export class TerrainTileManager {
 
     private static _terrainMetadata: TerrainMetadata | null = null;
-    private static _terrainTileGeometryCache = new Map<string, THREE.BufferGeometry>();
     private static _demTextureCache = new Map<string, THREE.Texture>();
     private static _dopTextureCache = new Map<string, THREE.Texture>();
 
@@ -33,6 +33,7 @@ export class TerrainTileManager {
         const demPromises = this._terrainMetadata.levels.map(async (level) => {
             if (!this._demTextureCache.has(level.demImagePath)) {
                 const demTexture = await textureLoader.loadAsync(level.demImagePath);
+                demTexture.generateMipmaps = false
                 demTexture.wrapS = THREE.ClampToEdgeWrapping
                 demTexture.wrapT = THREE.ClampToEdgeWrapping
                 this._demTextureCache.set(level.demImagePath, demTexture);
@@ -43,9 +44,11 @@ export class TerrainTileManager {
             if (!this._dopTextureCache.has(level.dopImagePath)) {
                 const dopTexture = await textureLoader.loadAsync(level.dopImagePath);
                 dopTexture.colorSpace = THREE.SRGBColorSpace
-                dopTexture.wrapS = THREE.ClampToEdgeWrapping
-                dopTexture.wrapT = THREE.ClampToEdgeWrapping
+                // In WebGPU anisotropic filtering cannot be changed afterwards therefore we set it directly here and do not expose a tweak for it.
+                dopTexture.anisotropy = App.instance.renderer.getMaxAnisotropy()
                 dopTexture.generateMipmaps = true
+                dopTexture.minFilter = THREE.LinearMipmapLinearFilter
+                dopTexture.magFilter = THREE.LinearFilter
                 this._dopTextureCache.set(level.dopImagePath, dopTexture);
             }
         });
@@ -55,7 +58,6 @@ export class TerrainTileManager {
 
     static requestTerrainTileForNode(
         node: QuadTreeNode,
-        anisotropy: number,
         wireframe: boolean,
         shouldUseDemTexture: boolean,
         enableBoxHelper: boolean,
@@ -97,7 +99,6 @@ export class TerrainTileManager {
             zPos: zPos,
             bounds: node.bounds,
             size: node.size.x,
-            anistropy: anisotropy,
             dopTexture: dopTexture,
             demTexture: demTexture,
             wireframe: wireframe,
