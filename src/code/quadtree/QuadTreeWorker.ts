@@ -12,6 +12,9 @@ export class QuadTreeWorker {
         this._bounds = bounds;
         this._maxDepth = maxDepth;
         this._worker = new Worker(new URL('QuadTreeWorkerScript.ts', import.meta.url), { type: 'module' });
+        this._worker.onerror = (e) => {
+            console.error("QuadTreeWorker error:", e);
+        }
         this._worker.onmessage = (e) => {
             const nodes: QuadTreeNode[] = e.data;
             callback(nodes);

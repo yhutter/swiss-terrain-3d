@@ -8,7 +8,17 @@ export class GeometryGenerator {
 
     private static readonly TILE_SIZE = 33
 
-    static intitializeIndexBufferForStitchingModes() {
+    static initialize() {
+        GeometryGenerator.intitializeIndexBufferForStitchingModes();
+        GeometryGenerator.initalizeGeometriesForStitchingModes();
+    }
+
+
+    static getGeometryForStitchingMode(mode: IndexStitchingMode): THREE.BufferGeometry | undefined {
+        return GeometryGenerator._geometriesForStitchingModes.get(mode);
+    }
+
+    private static intitializeIndexBufferForStitchingModes() {
         for (const modeKey in IndexStitchingMode) {
             const mode = Number(modeKey) as IndexStitchingMode;
             if (!isNaN(mode)) {
@@ -19,7 +29,7 @@ export class GeometryGenerator {
         }
     }
 
-    static initalizeGeometriesForStitchingModes() {
+    private static initalizeGeometriesForStitchingModes() {
         for (const modeKey in IndexStitchingMode) {
             const mode = Number(modeKey) as IndexStitchingMode;
             if (!isNaN(mode)) {
@@ -31,12 +41,8 @@ export class GeometryGenerator {
 
     }
 
-    static getIndexBufferForStitchingMode(mode: IndexStitchingMode): THREE.BufferAttribute | undefined {
+    private static getIndexBufferForStitchingMode(mode: IndexStitchingMode): THREE.BufferAttribute | undefined {
         return GeometryGenerator._indexBuffersForStitchingModes.get(mode);
-    }
-
-    static getGeometryForStitchingMode(mode: IndexStitchingMode): THREE.BufferGeometry | undefined {
-        return GeometryGenerator._geometriesForStitchingModes.get(mode);
     }
 
     private static createRegularGridGeometry(size: number, indexStitchingMode = IndexStitchingMode.Full): THREE.BufferGeometry {

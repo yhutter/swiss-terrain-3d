@@ -8,7 +8,6 @@ export type TerrainTileParams = {
     zPos: number,
     size: number,
     bounds: THREE.Box2,
-    anistropy: number,
     dopTexture: THREE.Texture,
     demTexture: THREE.Texture,
     wireframe: boolean,

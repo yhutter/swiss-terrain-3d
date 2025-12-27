@@ -18,11 +18,16 @@ export class TerrainTileManager {
         return this._terrainMetadata;
     }
 
-    static async initializeFromMetadata(metadataPath: string) {
+    static async initialize(metadataPath: string): Promise<void> {
+        await TerrainTileManager.initializeFromMetadata(metadataPath);
+        await TerrainTileManager.preloadTextures();
+    }
+
+    private static async initializeFromMetadata(metadataPath: string) {
         TerrainTileManager._terrainMetadata = await TerrainMetadataParser.parseFromJson(metadataPath);
     }
 
-    static async preloadTextures() {
+    private static async preloadTextures() {
         if (this._terrainMetadata === null) {
             console.warn("TerrainTileManager: Terrain metadata not initialized.");
             return;

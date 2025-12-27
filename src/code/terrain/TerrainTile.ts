@@ -3,7 +3,6 @@ import { uniform, Fn, vec3, texture, uv, mix, positionGeometry, If, vec4 } from 
 
 import { TerrainTileParams } from './TerrainTileParams';
 import { GeometryGenerator } from '../Utils/GeometryGenerator';
-import { App } from '../App';
 import { IndexStitchingMode } from "../Utils/IndexStitchingMode";
 
 export class TerrainTile extends THREE.Group {
@@ -56,6 +55,9 @@ export class TerrainTile extends THREE.Group {
 
     enableLineMesh(value: boolean) {
         if (this._lineMesh) {
+            if (this._lineMesh.visible === value) {
+                return
+            }
             this._lineMesh.visible = value
         }
 
@@ -100,7 +102,6 @@ export class TerrainTile extends THREE.Group {
             this.remove(this._boxHelper)
         }
         if (this._mesh) {
-            this._mesh.geometry.dispose()
             this.remove(this._mesh)
         }
         if (this._lineMesh) {

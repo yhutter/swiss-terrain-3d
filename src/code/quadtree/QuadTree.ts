@@ -88,43 +88,46 @@ export class QuadTree {
         node.indexStitchingMode = mode;
     }
 
+    balance(leaves: QuadTreeNode[]): boolean {
+        let changed = false;
+        for (let i = 0; i < leaves.length; i++) {
+            for (let j = i + 1; j < leaves.length; j++) {
+                const a = leaves[i];
+                const b = leaves[j];
+
+                if (!this.areEdgeNeighbors(a.bounds, b.bounds)) continue;
+
+                const diff = Math.abs(a.level - b.level);
+                if (diff <= 1) continue; // already OK
+
+                // Pick the coarser (shallower) node to split
+                const coarser = a.level < b.level ? a : b;
+                if (this.splitNode(coarser)) {
+                    changed = true
+                }
+            }
+        }
+        return changed
+    }
+
     insertPosition(position: THREE.Vector2): void {
         // Clear existing children
         this._root.children = []
         this.insertPositionRecursive(this._root, position.clone());
-
-        this.balance()
+        let nodes = this.getChildrenRecursive(this._root);
+        while (this.balance(nodes)) {
+            nodes = this.getChildrenRecursive(this._root);
+        }
+        for (const node of nodes) {
+            this.updateStitchingModeForNode(node, nodes)
+        }
     }
 
-    private balance(): void {
-        let changed: boolean;
-        do {
-            changed = false;
-            const leaves = this.getChildren(); // leaf nodes
-
-            for (let i = 0; i < leaves.length; i++) {
-                for (let j = i + 1; j < leaves.length; j++) {
-                    const a = leaves[i];
-                    const b = leaves[j];
-
-                    if (!this.areEdgeNeighbors(a.bounds, b.bounds)) continue;
-
-                    const diff = Math.abs(a.level - b.level);
-                    if (diff <= 1) continue; // already OK
-
-                    // Pick the coarser (shallower) node to split
-                    const coarser = a.level < b.level ? a : b;
-                    this.splitNode(coarser);
-                    changed = true;
-                }
-            }
-        } while (changed);
-    }
-
-    private splitNode(node: QuadTreeNode): void {
-        if (node.children.length > 0) return;
-        if (node.level >= this._maxDepth) return;
+    private splitNode(node: QuadTreeNode): boolean {
+        if (node.children.length > 0) return false;
+        if (node.level >= this._maxDepth) return false;
         node.children = this.createChildNodes(node);
+        return true
     }
 
     private areEdgeNeighbors(aBounds: THREE.Box2, bBounds: THREE.Box2): boolean {
@@ -161,7 +164,7 @@ export class QuadTree {
         const distanceToNode = node.center.distanceTo(position);
 
         // Determine if we need to subdivide
-        const distanceFactor = 2
+        const distanceFactor = 1
         if (distanceToNode < node.size.x * distanceFactor && node.level < this._maxDepth) {
             this.splitNode(node);
         }

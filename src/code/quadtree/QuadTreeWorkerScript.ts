@@ -42,10 +42,11 @@ const createChildNodes = (node: QuadTreeNode): QuadTreeNode[] => {
     return children;
 }
 
-const splitNode = (node: QuadTreeNode, maxDepth: number): void => {
-    if (node.children.length > 0) return;
-    if (node.level >= maxDepth) return;
+const splitNode = (node: QuadTreeNode, maxDepth: number): boolean => {
+    if (node.children.length > 0) return false;
+    if (node.level >= maxDepth) return false;
     node.children = createChildNodes(node);
+    return true
 }
 
 const insertPosition = (node: QuadTreeNode, position: THREE.Vector2, maxDepth: number): void => {
@@ -143,27 +144,49 @@ const updateStitchingModeForNode = (node: QuadTreeNode, allNodes: QuadTreeNode[]
     node.indexStitchingMode = mode;
 }
 
-const balance = (leaves: QuadTreeNode[], maxDepth: number): void => {
-    let changed: boolean;
-    do {
-        changed = false;
-        for (let i = 0; i < leaves.length; i++) {
-            for (let j = i + 1; j < leaves.length; j++) {
-                const a = leaves[i];
-                const b = leaves[j];
+// const balance = (leaves: QuadTreeNode[], maxDepth: number): void => {
+//     let changed: boolean;
+//     do {
+//         changed = false;
+//         for (let i = 0; i < leaves.length; i++) {
+//             for (let j = i + 1; j < leaves.length; j++) {
+//                 const a = leaves[i];
+//                 const b = leaves[j];
+//
+//                 if (!areEdgeNeighbors(a.bounds, b.bounds)) continue;
+//
+//                 const diff = Math.abs(a.level - b.level);
+//                 if (diff <= 1) continue; // already OK
+//
+//                 // Pick the coarser (shallower) node to split
+//                 const coarser = a.level < b.level ? a : b;
+//                 splitNode(coarser, maxDepth);
+//                 changed = true;
+//             }
+//         }
+//     } while (changed);
+// }
 
-                if (!areEdgeNeighbors(a.bounds, b.bounds)) continue;
+const balance = (leaves: QuadTreeNode[], maxDepth: number): boolean => {
+    let changed = false;
+    for (let i = 0; i < leaves.length; i++) {
+        for (let j = i + 1; j < leaves.length; j++) {
+            const a = leaves[i];
+            const b = leaves[j];
 
-                const diff = Math.abs(a.level - b.level);
-                if (diff <= 1) continue; // already OK
+            if (!areEdgeNeighbors(a.bounds, b.bounds)) continue;
 
-                // Pick the coarser (shallower) node to split
-                const coarser = a.level < b.level ? a : b;
-                splitNode(coarser, maxDepth);
-                changed = true;
+            const diff = Math.abs(a.level - b.level);
+            if (diff <= 1) continue; // already OK
+
+            // Pick the coarser (shallower) node to split
+            const coarser = a.level < b.level ? a : b;
+            if (splitNode(coarser, maxDepth)) {
+                changed = true
             }
         }
-    } while (changed);
+    }
+    return changed
 }
 
 onmessage = (e: MessageEvent<[THREE.Box2, number, THREE.Vector2]>) => {
@@ -185,8 +208,10 @@ onmessage = (e: MessageEvent<[THREE.Box2, number, THREE.Vector2]>) => {
     };
     root.id = generateIdForNode(root);
     insertPosition(root, position, maxDepth);
-    const nodes = getChildrenRecursive(root);
-    balance(nodes, maxDepth)
+    let nodes = getChildrenRecursive(root);
+    while (balance(nodes, maxDepth)) {
+        nodes = getChildrenRecursive(root);
+    }
     for (const node of nodes) {
         updateStitchingModeForNode(node, nodes)
     }

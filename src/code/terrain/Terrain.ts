@@ -3,16 +3,15 @@ import { App } from '../App';
 import { TerrainTile } from "./TerrainTile";
 import { TerrainMetadata } from "./TerrainMetadata";
 import { TerrainTileManager } from "./TerrainTileManager";
-import { QuadTree } from "../QuadTree/QuadTree";
 import { QuadTreeNode } from "../QuadTree/QuadTreeNode";
 import { GeometryGenerator } from "../Utils/GeometryGenerator";
 import { TerrainCameraControls } from "./TerrainCameraControls";
+import { QuadTreeWorker } from "../QuadTree/QuadTreeWorker";
 
 export class Terrain extends THREE.Group {
 
     private _tweaks = {
         wireframe: false,
-        anisotropy: 16,
         switchToOrtographicCamera: false,
         enableDemTexture: true,
         enableLineMesh: false,
@@ -20,19 +19,19 @@ export class Terrain extends THREE.Group {
         enableBoxHelper: false,
     }
 
+    private _quadTreeWorker: QuadTreeWorker | null = null;
+
     // TODO: Make these paths selectable via dropdown in Tweakpane
-    private _terrainMetadataPath = "/static/data/output_tiles-chur/metadata.json"
+    private _terrainMetadataPath = "/static/data/output_tiles-sargans/metadata.json"
 
     private _currentActiveTiles: Map<string, TerrainTile> = new Map<string, TerrainTile>()
-    private _removedTiles: Map<string, TerrainTile> = new Map<string, TerrainTile>()
     private _metadata: TerrainMetadata | null = null
     private _camera: THREE.PerspectiveCamera
     private _cameraQuadTreeVisualization: THREE.OrthographicCamera
     private _cameraPosition: THREE.Vector3 = new THREE.Vector3(0, 0, 0)
-    private _quadTree: QuadTree | null = null
+
     private _terrainCameraControls: TerrainCameraControls
     private _size: THREE.Vector2 = new THREE.Vector2(0, 0)
-    private _tilesToRemoveIds = new Set<string>()
 
     get center(): THREE.Vector3 {
         if (!this._metadata) {
@@ -74,7 +73,7 @@ export class Terrain extends THREE.Group {
         const aspect = App.instance.aspect
         // TODO: Calculate far based on terrain size (use half terrain size)
         const near = 1
-        const far = 12000
+        const far = 20000
         this._camera = new THREE.PerspectiveCamera(70, aspect, near, far)
 
         this._cameraQuadTreeVisualization = new THREE.OrthographicCamera()
@@ -85,10 +84,8 @@ export class Terrain extends THREE.Group {
     }
 
     async initialize(): Promise<void> {
-        GeometryGenerator.intitializeIndexBufferForStitchingModes()
-        GeometryGenerator.initalizeGeometriesForStitchingModes()
-        await TerrainTileManager.initializeFromMetadata(this._terrainMetadataPath)
-        await TerrainTileManager.preloadTextures()
+        GeometryGenerator.initialize()
+        await TerrainTileManager.initialize(this._terrainMetadataPath)
         this._metadata = TerrainTileManager.terrainMetadata
         if (!this._metadata) {
             console.error("Terrain: Failed to load terrain metadata!")
@@ -100,7 +97,11 @@ export class Terrain extends THREE.Group {
         this._size.copy(size)
 
         const maxDepth = this.maxLevel
-        this._quadTree = new QuadTree(this.boundingBox!, maxDepth)
+        this._quadTreeWorker = new QuadTreeWorker(
+            this.boundingBox!,
+            maxDepth,
+            (nodes) => this.updateFromQuadTreeNodes(nodes)
+        )
 
         this._cameraPosition = new THREE.Vector3(
             this.center.x,
@@ -138,30 +139,24 @@ export class Terrain extends THREE.Group {
     update(dt: number) {
         this._terrainCameraControls.update(dt)
         this._cameraPosition.copy(this._camera.position)
-        if (this._quadTree != null) {
-            const position = new THREE.Vector2(this._cameraPosition.x, this._cameraPosition.z)
-            this._quadTree.insertPosition(position)
-            const quadTreeNodes = this._quadTree.getChildren()
-            for (const node of quadTreeNodes) {
-                this._quadTree.updateStitchingModeForNode(node, quadTreeNodes)
-            }
-            this.updateFromQuadTreeNodes(quadTreeNodes)
+        const position = new THREE.Vector2(this._cameraPosition.x, this._cameraPosition.z)
+        if (this._quadTreeWorker != null) {
+            this._quadTreeWorker.insertPosition(position)
         }
     }
 
     private updateFromQuadTreeNodes(quadTreeNodes: QuadTreeNode[]): void {
         // Track player position
-        if (this._tweaks.switchToOrtographicCamera) {
-            this._cameraQuadTreeVisualization.position.x = this._cameraPosition.x
-            this._cameraQuadTreeVisualization.position.z = this._cameraPosition.z
-        }
+        this._cameraQuadTreeVisualization.position.x = this._cameraPosition.x
+        this._cameraQuadTreeVisualization.position.z = this._cameraPosition.z
+
+        const nodeIds = new Set(quadTreeNodes.map(node => node.id))
 
         // Figure out which tiles we can remove, e.g. tiles that are not in the Quad Tree Nodes.
         for (const tile of this._currentActiveTiles.values()) {
-            const foundNode = quadTreeNodes.find(node => node.id === tile.identifier)
-            if (!foundNode) {
+            if (!nodeIds.has(tile.identifier)) {
                 // Remove tile
-                this._tilesToRemoveIds.add(tile.identifier)
+                this.removeTile(tile)
             }
         }
 
@@ -180,7 +175,6 @@ export class Terrain extends THREE.Group {
             const useDemTexture = this._tweaks.enableDemTexture
             const tile = TerrainTileManager.requestTerrainTileForNode(
                 node,
-                this._tweaks.anisotropy,
                 this._tweaks.wireframe,
                 useDemTexture,
                 this._tweaks.enableBoxHelper,
@@ -193,17 +187,6 @@ export class Terrain extends THREE.Group {
             }
             this._currentActiveTiles.set(tile.identifier, tile)
             this.add(tile)
-        }
-
-        // Remove the tiles that are no longer needed
-        if (this._tilesToRemoveIds.size > 0) {
-            for (const tileId of this._tilesToRemoveIds) {
-                const tile = this._currentActiveTiles.get(tileId)
-                if (tile) {
-                    this.removeTile(tile)
-                }
-            }
-            this._tilesToRemoveIds.clear()
         }
     }
 
@@ -218,17 +201,6 @@ export class Terrain extends THREE.Group {
         const folder = App.instance.pane.addFolder({
             title: 'Terrain',
             expanded: true,
-        })
-
-        folder.addBinding(this._tweaks, "anisotropy", {
-            label: "Anisotropy",
-            min: 1,
-            max: 32,
-            step: 1,
-        }).on("change", (e) => {
-            for (const tile of this._currentActiveTiles.values()) {
-                tile.setAnisotropy(e.value)
-            }
         })
 
         folder.addBinding(this._tweaks, "wireframe", {
