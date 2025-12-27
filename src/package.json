@@ -13,11 +13,11 @@
   "description": "",
   "dependencies": {
     "stats-gl": "^3.8.0",
-    "three": "^0.180.0"
+    "three": "^0.182.0"
   },
   "devDependencies": {
     "@tweakpane/core": "^2.0.5",
-    "@types/three": "^0.181.0",
+    "@types/three": "^0.182.0",
     "tweakpane": "^4.0.5",
     "typescript": "^5.9.3",
     "vite": "^7.1.7"
