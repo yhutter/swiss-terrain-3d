@@ -13,13 +13,15 @@
   "description": "",
   "dependencies": {
     "stats-gl": "^3.8.0",
-    "three": "^0.182.0"
+    "three": "^0.182.0",
+    "three-custom-shader-material": "^6.4.0"
   },
   "devDependencies": {
     "@tweakpane/core": "^2.0.5",
     "@types/three": "^0.182.0",
     "tweakpane": "^4.0.5",
     "typescript": "^5.9.3",
-    "vite": "^7.1.7"
+    "vite": "^7.1.7",
+    "vite-plugin-glsl": "^1.5.5"
   }
 }

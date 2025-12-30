@@ -1,4 +1,4 @@
-import * as THREE from 'three/webgpu';
+import * as THREE from 'three';
 import { PointerLockControls } from 'three/examples/jsm/Addons.js';
 import { InputHandler } from '../Utils/InputHandler';
 import { App } from '../App';

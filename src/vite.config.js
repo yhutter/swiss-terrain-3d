@@ -1,15 +1,9 @@
 import { defineConfig } from "vite"
-import path from "path"
+import glsl from 'vite-plugin-glsl';
 
 export default defineConfig({
-    plugins: [],
+    plugins: [glsl()],
     server: {
         open: true
     },
-    resolve: {
-        alias: {
-            "three/webgpu": path.resolve(__dirname, './node_modules/three/build/three.webgpu'),
-            "three/tsl": path.resolve(__dirname, './node_modules/three/build/three.tsl'),
-        }
-    }
 })

@@ -1,4 +1,4 @@
-import * as THREE from "three/webgpu"
+import * as THREE from "three"
 import { TerrainMetadata } from "./TerrainMetadata";
 import { TerrainMetadataParser } from "./TerrainMetadataParser";
 import { TerrainLevelMetadata } from "./TerrainLevelMetadata";
@@ -49,8 +49,7 @@ export class TerrainTileManager {
             if (!this._dopTextureCache.has(level.dopImagePath)) {
                 const dopTexture = await textureLoader.loadAsync(level.dopImagePath);
                 dopTexture.colorSpace = THREE.SRGBColorSpace
-                // In WebGPU anisotropic filtering cannot be changed afterwards therefore we set it directly here and do not expose a tweak for it.
-                dopTexture.anisotropy = App.instance.renderer.getMaxAnisotropy()
+                dopTexture.anisotropy = App.instance.renderer.capabilities.getMaxAnisotropy()
                 dopTexture.generateMipmaps = true
                 dopTexture.minFilter = THREE.LinearMipmapLinearFilter
                 dopTexture.magFilter = THREE.LinearFilter

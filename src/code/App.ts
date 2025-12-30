@@ -1,6 +1,6 @@
 import { HDRLoader } from "three/examples/jsm/Addons.js"
-import { SkyMesh } from "three/examples/jsm/objects/SkyMesh.js"
-import * as THREE from "three/webgpu"
+import { Sky } from "three/examples/jsm/objects/Sky.js"
+import * as THREE from "three"
 import { Pane, FolderApi } from "tweakpane"
 import { Terrain } from "./Terrain/Terrain"
 import Stats from "stats-gl";
@@ -11,13 +11,13 @@ export class App {
     // We receive the units in meters (for example 1000 meters). Tweak this value to have a more manageable scale in the 3D scene. Basically this value maps meter to scene units.
     private _renderScale = 1
 
-    private _renderer: THREE.WebGPURenderer
+    private _renderer: THREE.WebGLRenderer
     private _scene: THREE.Scene
     private _clock: THREE.Clock
     private _pane: Pane
     private _tweaksFolder: FolderApi
     private _textureLoader: THREE.TextureLoader
-    private _skyMesh: SkyMesh | null = null
+    private _sky: Sky | null = null
     private _sunPosition = new THREE.Vector3()
     private _hdrLoader: HDRLoader
     private readonly _stats = new Stats({
@@ -75,7 +75,7 @@ export class App {
         return this._textureLoader
     }
 
-    get renderer(): THREE.WebGPURenderer {
+    get renderer(): THREE.WebGLRenderer {
         return this._renderer
     }
 
@@ -88,8 +88,10 @@ export class App {
     }
 
     constructor() {
-        this._renderer = new THREE.WebGPURenderer({
+        const canvas = document.getElementById("app")
+        this._renderer = new THREE.WebGLRenderer({
             antialias: true,
+            canvas: canvas as HTMLCanvasElement,
         })
 
         this._renderer.setSize(window.innerWidth, window.innerHeight)
@@ -98,7 +100,6 @@ export class App {
         this._renderer.setPixelRatio(pixelRatio)
         this._renderer.setClearColor(this._tweaks.background)
         this._renderer.toneMapping = this._tweaks.toneMapping
-        document.body.appendChild(this._renderer.domElement)
 
         this._hdrLoader = new HDRLoader()
 
@@ -127,15 +128,15 @@ export class App {
         }
         this._scene.add(this._terrain)
 
-        this._skyMesh = new SkyMesh()
+        this._sky = new Sky()
         // TODO: Use the terrain size here
-        this._skyMesh.scale.setScalar(450000 * this._renderScale)
+        this._sky.scale.setScalar(450000 * this._renderScale)
 
-        this._scene.add(this._skyMesh)
+        this._scene.add(this._sky)
 
+        this.onSkyTweaksChanged()
         this.setupHDREnvironment()
         this.setupTweaks()
-        this.onSkyTweaksChanged()
 
         window.addEventListener("resize", () => this.onResize())
         this.onResize()
@@ -220,18 +221,18 @@ export class App {
     }
 
     private onSkyTweaksChanged(): void {
-        if (!this._skyMesh) return
+        if (!this._sky) return
 
-        this._skyMesh.turbidity.value = this._tweaks.sky.turbidity
-        this._skyMesh.rayleigh.value = this._tweaks.sky.rayleigh
-        this._skyMesh.mieCoefficient.value = this._tweaks.sky.mieCoefficient
-        this._skyMesh.mieDirectionalG.value = this._tweaks.sky.mieDirectionlG
+        this._sky.material.uniforms.turbidity.value = this._tweaks.sky.turbidity
+        this._sky.material.uniforms.rayleigh.value = this._tweaks.sky.rayleigh
+        this._sky.material.uniforms.mieCoefficient.value = this._tweaks.sky.mieCoefficient
+        this._sky.material.uniforms.mieDirectionalG.value = this._tweaks.sky.mieDirectionlG
 
         const phi = THREE.MathUtils.degToRad(90 - this._tweaks.sky.elevation)
         const theta = THREE.MathUtils.degToRad(this._tweaks.sky.azimuth)
 
         this._sunPosition.setFromSphericalCoords(1, phi, theta)
-        this._skyMesh.sunPosition.value.copy(this._sunPosition)
+        this._sky.material.uniforms.sunPosition.value.copy(this._sunPosition)
     }
 
     private onResize(): void {
@@ -251,7 +252,6 @@ export class App {
         this.update()
         const camera = this._terrain!.activeCamera
         this._renderer.render(this._scene, camera)
-        this._renderer.resolveTimestampsAsync(THREE.TimestampQuery.RENDER)
         this._stats.update();
     }
 }

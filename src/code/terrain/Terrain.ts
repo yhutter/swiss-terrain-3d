@@ -1,4 +1,4 @@
-import * as THREE from "three/webgpu"
+import * as THREE from "three"
 import { App } from '../App';
 import { TerrainTile } from "./TerrainTile";
 import { TerrainMetadata } from "./TerrainMetadata";
@@ -22,8 +22,9 @@ export class Terrain extends THREE.Group {
     private _quadTreeWorker: QuadTreeWorker | null = null;
 
     // TODO: Make these paths selectable via dropdown in Tweakpane
-    private _terrainMetadataPath = "/static/data/output_tiles-sargans/metadata.json"
+    private _terrainMetadataPath = "/static/data/output_tiles-chur/metadata.json"
 
+    private _tilesBeingPrecompiled = new Set<string>()
     private _currentActiveTiles: Map<string, TerrainTile> = new Map<string, TerrainTile>()
     private _metadata: TerrainMetadata | null = null
     private _camera: THREE.PerspectiveCamera
@@ -185,8 +186,17 @@ export class Terrain extends THREE.Group {
                 console.error(`Terrain: Failed to get tile for node ${node.id}`)
                 return
             }
-            this._currentActiveTiles.set(tile.identifier, tile)
-            this.add(tile)
+            if (this._tilesBeingPrecompiled.has(tile.identifier)) {
+                continue
+            }
+            this._tilesBeingPrecompiled.add(tile.identifier)
+            App.instance.renderer.compileAsync(tile, this._camera).then(() => {
+                this._tilesBeingPrecompiled.delete(tile.identifier)
+                this._currentActiveTiles.set(tile.identifier, tile)
+                this.add(tile)
+                // console.log(`Compiled tile ${tile.identifier} async`)
+            })
+            // console.log(`Compiled tile ${tile.identifier}`)
         }
     }
 

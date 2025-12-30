@@ -1,4 +1,4 @@
-import * as THREE from 'three/webgpu';
+import * as THREE from 'three';
 import { QuadTreeNode } from './QuadTreeNode';
 import { IdGenerator } from '../Utils/IdGenerator';
 import { IndexStitchingMode } from '../Utils/IndexStitchingMode';

@@ -1,4 +1,4 @@
-import * as THREE from "three/webgpu"
+import * as THREE from "three"
 import { IndexStitchingMode } from "./IndexStitchingMode";
 
 export class GeometryGenerator {

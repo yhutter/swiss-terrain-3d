@@ -1,4 +1,4 @@
-import * as THREE from 'three/webgpu';
+import * as THREE from 'three';
 import { QuadTreeNode } from './QuadTreeNode';
 import { IndexStitchingMode } from '../Utils/IndexStitchingMode';
 import { IdGenerator } from '../Utils/IdGenerator';
@@ -58,7 +58,7 @@ const insertPositionRecursive = (node: QuadTreeNode, position: THREE.Vector2, ma
     const distanceToNode = node.center.distanceTo(position);
 
     // Determine if we need to subdivide
-    const distanceFactor = 1
+    const distanceFactor = 2
     if (distanceToNode < node.size.x * distanceFactor && node.level < maxDepth) {
         splitNode(node, maxDepth);
     }
