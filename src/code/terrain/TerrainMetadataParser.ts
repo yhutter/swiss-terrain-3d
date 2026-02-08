@@ -16,7 +16,9 @@ export class TerrainMetadataParser {
         const terrainLevelMetadata: TerrainLevelMetadata = {
             level: data["level"] || 0,
             demImagePath: TerrainMetadataParser.cleanUpImagePath(data["dem_image_path"] || ""),
+            demKtxImagePath: TerrainMetadataParser.cleanUpImagePath(data["dem_image_ktx_path"] || ""),
             dopImagePath: TerrainMetadataParser.cleanUpImagePath(data["dop_image_path"] || ""),
+            dopKtxImagePath: TerrainMetadataParser.cleanUpImagePath(data["dop_image_ktx_path"] || ""),
             bboxWorldSpace: new THREE.Box2(
                 new THREE.Vector2(
                     data["bbox_world_space"]?.[0] || 0,
@@ -29,7 +31,6 @@ export class TerrainMetadataParser {
             ),
             centerWorldSpace: new THREE.Vector2(),
         }
-
         terrainLevelMetadata.bboxWorldSpace.min.multiplyScalar(App.instance.renderScale)
         terrainLevelMetadata.bboxWorldSpace.max.multiplyScalar(App.instance.renderScale)
         const center = new THREE.Vector2()

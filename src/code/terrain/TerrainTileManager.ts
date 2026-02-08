@@ -1,4 +1,5 @@
 import * as THREE from "three"
+import { KTX2Loader } from 'three/examples/jsm/loaders/KTX2Loader.js';
 import { TerrainMetadata } from "./TerrainMetadata";
 import { TerrainMetadataParser } from "./TerrainMetadataParser";
 import { TerrainLevelMetadata } from "./TerrainLevelMetadata";
@@ -33,30 +34,33 @@ export class TerrainTileManager {
             return;
         }
 
-        const textureLoader = new THREE.TextureLoader();
+        const ktxLoader = new KTX2Loader()
+        ktxLoader.setTranscoderPath('/static/basis/')
+        ktxLoader.detectSupport(App.instance.renderer);
 
         const demPromises = this._terrainMetadata.levels.map(async (level) => {
-            if (!this._demTextureCache.has(level.demImagePath)) {
-                const demTexture = await textureLoader.loadAsync(level.demImagePath);
+            const demPath = level.demKtxImagePath;
+            if (!this._demTextureCache.has(demPath)) {
+                const demTexture = await ktxLoader.loadAsync(demPath);
                 demTexture.generateMipmaps = false
                 demTexture.wrapS = THREE.ClampToEdgeWrapping
                 demTexture.wrapT = THREE.ClampToEdgeWrapping
-                this._demTextureCache.set(level.demImagePath, demTexture);
+                this._demTextureCache.set(demPath, demTexture);
             }
         });
 
         const dopPromises = this._terrainMetadata.levels.map(async (level) => {
-            if (!this._dopTextureCache.has(level.dopImagePath)) {
-                const dopTexture = await textureLoader.loadAsync(level.dopImagePath);
+            const dopPath = level.dopKtxImagePath;
+            if (!this._dopTextureCache.has(dopPath)) {
+                const dopTexture = await ktxLoader.loadAsync(dopPath);
                 dopTexture.colorSpace = THREE.SRGBColorSpace
                 dopTexture.anisotropy = App.instance.renderer.capabilities.getMaxAnisotropy()
-                dopTexture.generateMipmaps = true
-                dopTexture.minFilter = THREE.LinearMipmapLinearFilter
-                dopTexture.magFilter = THREE.LinearFilter
-                this._dopTextureCache.set(level.dopImagePath, dopTexture);
+                // dopTexture.generateMipmaps = true
+                // dopTexture.minFilter = THREE.LinearMipmapLinearFilter
+                // dopTexture.magFilter = THREE.LinearFilter
+                this._dopTextureCache.set(dopPath, dopTexture);
             }
         });
-
         await Promise.all([...demPromises, ...dopPromises]);
     }
 
@@ -83,16 +87,18 @@ export class TerrainTileManager {
         const xPos = terrainTileInfo.centerWorldSpace.x;
         const zPos = terrainTileInfo.centerWorldSpace.y;
 
-        const dopTexture = this._dopTextureCache.get(terrainTileInfo.dopImagePath);
+        const dopPath = terrainTileInfo.dopKtxImagePath;
+        const dopTexture = this._dopTextureCache.get(dopPath);
         if (!dopTexture) {
-            console.error(`TerrainTileManager: DOP texture not preloaded for path ${terrainTileInfo.dopImagePath}.`);
+            console.error(`TerrainTileManager: DOP texture not preloaded for path ${dopPath}.`);
             return null;
         }
 
 
-        const demTexture = this._demTextureCache.get(terrainTileInfo.demImagePath);
+        const demPath = terrainTileInfo.demKtxImagePath;
+        const demTexture = this._demTextureCache.get(demPath);
         if (!demTexture) {
-            console.error(`TerrainTileManager: DEM texture not preloaded for path ${terrainTileInfo.demImagePath}.`);
+            console.error(`TerrainTileManager: DEM texture not preloaded for path ${demPath}.`);
             return null;
         }
 

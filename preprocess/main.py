@@ -10,6 +10,7 @@ from geotiff import GeoTiff
 import numpy as np
 from PIL import Image
 import math
+import subprocess
 
 
 DOP_UPDATE_CYCLE_YEARS = 3
@@ -659,7 +660,9 @@ def process_dem_lod_level(
     return lod_dir
 
 
-def preprocess(dem_input: str, dop_input: str, out_dir: str, chunk_px: int):
+def preprocess(
+    dem_input: str, dop_input: str, out_dir: str, chunk_px: int, convert_to_ktx: bool
+):
     """
     Main processing function to build and tile DEM and Image LOD pyramids.
     """
@@ -861,6 +864,65 @@ def preprocess(dem_input: str, dop_input: str, out_dir: str, chunk_px: int):
         # Downsample DOP tiles to chunk size in order to save space.
         downsample_tiles_in_lod_dir(lod_dir, chunk_px, Image.BILINEAR)
 
+    # Generate KTX2 compressed image files
+    if convert_to_ktx:
+        # Check if ktx command is available in terminal
+        if not shutil.which("ktx"):
+            print(
+                "ktx command not found in PATH. Please install the KTX-Software tools to enable KTX2 conversion. You can download it from here: https://github.com/KhronosGroup/KTX-Software/releases"
+            )
+        else:
+            print("Converting tiles to KTX2 format...")
+            for level in range(lod_levels):
+                level_dem_dir = Path(out_dir) / "dem" / f"lod_{level}"
+                level_dop_dir = Path(out_dir) / "dop" / f"lod_{level}"
+                dem_tiles = list(level_dem_dir.glob("*.png"))
+                for dem_tile in dem_tiles:
+                    out_ktx2_file = dem_tile.with_suffix(".ktx2")
+                    subprocess.run(
+                        [
+                            "ktx",
+                            "create",
+                            "--format",
+                            "R8_UNORM",
+                            "--assign-tf",
+                            "linear",
+                            str(dem_tile),
+                            str(out_ktx2_file),
+                        ],
+                        check=True,
+                    )
+                print(
+                    f"Finished converting DEM tiles to KTX2 format for level {level}."
+                )
+
+                dop_tiles = list(level_dop_dir.glob("*.png"))
+                for dop_tile in dop_tiles:
+                    out_ktx2_file = dop_tile.with_suffix(".ktx2")
+                    subprocess.run(
+                        [
+                            "ktx",
+                            "create",
+                            "--format",
+                            "R8G8B8A8_SRGB",
+                            "--assign-tf",
+                            "srgb",
+                            "--encode",
+                            "uastc",
+                            "--uastc-quality",
+                            "2",
+                            "--generate-mipmap",
+                            str(dop_tile),
+                            str(out_ktx2_file),
+                        ],
+                        check=True,
+                    )
+                print(
+                    f"Finished converting DOP tiles to KTX2 format for level {level}."
+                )
+    else:
+        print("Skipping conversion to KTX2 format.")
+
     # Collect level metadata
     print("Generating metadata...")
     lod_levels_info = []
@@ -897,11 +959,22 @@ def preprocess(dem_input: str, dop_input: str, out_dir: str, chunk_px: int):
                     lower_right_y - dem_bbox_center[1],
                 ),
             )
+
             dop_tile = level_dop_dir / dem_tile.name  # same tile name as DEM
+
+            dem_ktx_file = dem_tile.with_suffix(".ktx2")
+            dop_ktx_file = dop_tile.with_suffix(".ktx2")
+
             level_info = {
                 "level": level,
                 "dem_image_path": str(dem_tile),
+                "dem_image_ktx_path": str(dem_ktx_file)
+                if dem_ktx_file.exists()
+                else None,
                 "dop_image_path": str(dop_tile),
+                "dop_image_ktx_path": str(dop_ktx_file)
+                if dop_ktx_file.exists()
+                else None,
                 "bbox": [
                     int(tile_bbox[0][0]),
                     int(tile_bbox[0][1]),
@@ -1016,14 +1089,45 @@ if __name__ == "__main__":
             raise RuntimeError(
                 f"Active config '{active_config_name}' not found in preprocess-config.json"
             )
-        detect_missing = active_config.get("detect_missing", True)
-        skip_download = active_config.get("skip_download", False)
-        dem_csv_path = active_config.get("dem_csv_path", None)
-        dop_csv_path = active_config.get("dop_csv_path", None)
-        dem_download_dir = active_config.get("dem_download_dir", None)
-        dop_download_dir = active_config.get("dop_download_dir", None)
-        output_dir = active_config.get("output_dir", None)
-        tile_size_px = active_config.get("tile_size_px", 500)
+
+        default_config_options = {
+            "detect_missing": True,
+            "skip_download": False,
+            "dem_csv_path": None,
+            "dop_csv_path": None,
+            "dem_download_dir": None,
+            "dop_download_dir": None,
+            "output_dir": None,
+            "tile_size_px": 500,
+            "convert_to_ktx": True,
+        }
+        detect_missing = active_config.get(
+            "detect_missing", default_config_options["detect_missing"]
+        )
+        skip_download = active_config.get(
+            "skip_download", default_config_options["skip_download"]
+        )
+        dem_csv_path = active_config.get(
+            "dem_csv_path", default_config_options["dem_csv_path"]
+        )
+        dop_csv_path = active_config.get(
+            "dop_csv_path", default_config_options["dop_csv_path"]
+        )
+        dem_download_dir = active_config.get(
+            "dem_download_dir", default_config_options["dem_download_dir"]
+        )
+        dop_download_dir = active_config.get(
+            "dop_download_dir", default_config_options["dop_download_dir"]
+        )
+        output_dir = active_config.get(
+            "output_dir", default_config_options["output_dir"]
+        )
+        tile_size_px = active_config.get(
+            "tile_size_px", default_config_options["tile_size_px"]
+        )
+        convert_to_ktx = active_config.get(
+            "convert_to_ktx", default_config_options["convert_to_ktx"]
+        )
         print("Config file found. Using the following parameters:")
         print(json.dumps(active_config, indent=2))
 
@@ -1048,4 +1152,6 @@ if __name__ == "__main__":
         download_tiles_from_csv(dop_csv_patched_path, dop_download_dir)
 
     print("Starting preprocessing pipeline...")
-    preprocess(dem_download_dir, dop_download_dir, output_dir, tile_size_px)
+    preprocess(
+        dem_download_dir, dop_download_dir, output_dir, tile_size_px, convert_to_ktx
+    )

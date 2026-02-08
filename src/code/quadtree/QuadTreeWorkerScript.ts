@@ -58,7 +58,7 @@ const insertPositionRecursive = (node: QuadTreeNode, position: THREE.Vector2, ma
     const distanceToNode = node.center.distanceTo(position);
 
     // Determine if we need to subdivide
-    const distanceFactor = 2
+    const distanceFactor = 1
     if (distanceToNode < node.size.x * distanceFactor && node.level < maxDepth) {
         splitNode(node, maxDepth);
     }

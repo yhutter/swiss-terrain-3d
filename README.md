@@ -24,8 +24,8 @@ python main.py
 - [Process GeoTIFF Files with Python](https://kipling.medium.com/using-a-geotiff-and-a-touch-of-python-to-make-topographic-images-1c1b0349551b)
 - [Themes for TweakPane](https://tweakpane.github.io/docs/theming/#builder)
 - [ThreeJS Examples](https://threejs.org/examples/)
-- [ThreeJS Shading Language](https://github.com/mrdoob/three.js/wiki/Three.js-Shading-Language)
 - [SimonDev Custom FPS Controls](https://github.com/simondevyoutube/ProceduralTerrain_Part3/blob/master/src/controls.js)
+- [KTX Tools](https://github.com/KhronosGroup/KTX-Software/releases)
 
 ## :package: Libraries
 This project uses the following libraries
