@@ -26,6 +26,9 @@ python main.py
 - [ThreeJS Examples](https://threejs.org/examples/)
 - [SimonDev Custom FPS Controls](https://github.com/simondevyoutube/ProceduralTerrain_Part3/blob/master/src/controls.js)
 - [KTX Tools](https://github.com/KhronosGroup/KTX-Software/releases)
+- [PolyHaven German Town Street HDRI](https://polyhaven.com/a/german_town_street)
+- [PolyHaven Plains Sunset HDRI](https://polyhaven.com/a/plains_sunset)
+- [PolyHaven Rogland Clear Night HDRI](https://polyhaven.com/a/rogland_clear_night)
 
 ## :package: Libraries
 This project uses the following libraries

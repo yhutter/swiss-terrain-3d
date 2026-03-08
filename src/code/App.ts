@@ -6,11 +6,15 @@ import { Terrain } from "./Terrain/Terrain"
 import Stats from "stats-gl";
 
 export class App {
-    private _envMapPath = "/static/maps/envmap-1k.hdr"
+    private _envMapsPath = ["/static/maps/envmap01.hdr", "/static/maps/envmap02.hdr", "/static/maps/envmap03.hdr"]
+    private _envMaps: Array<THREE.DataTexture> = []
+    private _envMapIndex = 0
 
     // We receive the units in meters (for example 1000 meters). Tweak this value to have a more manageable scale in the 3D scene. Basically this value maps meter to scene units.
     private _renderScale = 1
 
+    private _sunLight = new THREE.DirectionalLight(0xffffff, 1)
+    private _envMap: THREE.DataTexture | null = null
     private _renderer: THREE.WebGLRenderer
     private _scene: THREE.Scene
     private _clock: THREE.Clock
@@ -37,6 +41,15 @@ export class App {
 
     private _tweaks = {
         background: new THREE.Color(0xffffff),
+        showEnvMap: true,
+        enableSunLight: false,
+        enableEnvMap: true,
+        envMapOptions: {
+            "EnvMap 01": 0,
+            "EnvMap 02": 1,
+            "EnvMap 03": 2,
+        },
+        envMap: 0,
         toneMappingOptions: {
             "None": THREE.NoToneMapping,
             "Agx": THREE.AgXToneMapping,
@@ -46,6 +59,7 @@ export class App {
         toneMapping: THREE.NoToneMapping,
         showStats: true,
         sky: {
+            visible: true,
             turbidity: 10,
             rayleigh: 1.25,
             elevation: 3,
@@ -134,6 +148,10 @@ export class App {
 
         this._scene.add(this._sky)
 
+        this._sunLight = new THREE.DirectionalLight(0xffffff, 1)
+        this._sunLight.visible = this._tweaks.enableSunLight
+        this._scene.add(this._sunLight)
+
         this.onSkyTweaksChanged()
         this.setupHDREnvironment()
         this.setupTweaks()
@@ -144,9 +162,14 @@ export class App {
     }
 
     private async setupHDREnvironment(): Promise<void> {
-        const envMap = await this._hdrLoader.loadAsync(this._envMapPath)
-        envMap.mapping = THREE.EquirectangularReflectionMapping
-        this._scene.environment = envMap
+        for (const path of this._envMapsPath) {
+            const envMap = await this._hdrLoader.loadAsync(path)
+            envMap.mapping = THREE.EquirectangularReflectionMapping
+            this._envMaps.push(envMap)
+        }
+        this._envMap = this._envMaps[this._envMapIndex]
+        this._scene.environment = this._envMap
+        this._scene.background = this._envMap
     }
 
     private setupTweaks(): void {
@@ -156,6 +179,38 @@ export class App {
             color: { type: "float" }
         }).on("change", (e) => {
             this._renderer.setClearColor(e.value)
+        })
+
+        this._tweaksFolder.addBinding(this._tweaks, "enableSunLight", {
+            label: "Enable Sun Light",
+        }).on("change", (e) => {
+            this._sunLight.visible = e.value
+        })
+
+        this._tweaksFolder.addBinding(this._tweaks, "envMap", {
+            label: "Env Maps",
+            options: this._tweaks.envMapOptions
+        }).on("change", (e) => {
+            this._envMapIndex = e.value
+            this._envMap = this._envMaps[this._envMapIndex]
+            if (this._tweaks.enableEnvMap) {
+                this._scene.environment = this._envMap
+            }
+            if (this._tweaks.showEnvMap) {
+                this._scene.background = this._envMap
+            }
+        })
+
+        this._tweaksFolder.addBinding(this._tweaks, "enableEnvMap", {
+            label: "Enable EnvMap",
+        }).on("change", (e) => {
+            this._scene.environment = e.value ? this._envMap : null
+        })
+
+        this._tweaksFolder.addBinding(this._tweaks, "showEnvMap", {
+            label: "Show EnvMap",
+        }).on("change", (e) => {
+            this._scene.background = e.value ? this._scene.environment : this._tweaks.background
         })
 
         this._tweaksFolder.addBinding(this._tweaks, "toneMapping", {
@@ -175,6 +230,10 @@ export class App {
             title: "Sky",
             expanded: true,
         })
+
+        skyFolder.addBinding(this._tweaks.sky, "visible", {
+            label: "Visible",
+        }).on("change", () => this.onSkyTweaksChanged())
 
         skyFolder.addBinding(this._tweaks.sky, "turbidity", {
             label: "Turbidity",
@@ -222,6 +281,8 @@ export class App {
 
     private onSkyTweaksChanged(): void {
         if (!this._sky) return
+
+        this._sky.visible = this._tweaks.sky.visible
 
         this._sky.material.uniforms.turbidity.value = this._tweaks.sky.turbidity
         this._sky.material.uniforms.rayleigh.value = this._tweaks.sky.rayleigh
