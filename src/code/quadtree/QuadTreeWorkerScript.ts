@@ -144,29 +144,6 @@ const updateStitchingModeForNode = (node: QuadTreeNode, allNodes: QuadTreeNode[]
     node.indexStitchingMode = mode;
 }
 
-// const balance = (leaves: QuadTreeNode[], maxDepth: number): void => {
-//     let changed: boolean;
-//     do {
-//         changed = false;
-//         for (let i = 0; i < leaves.length; i++) {
-//             for (let j = i + 1; j < leaves.length; j++) {
-//                 const a = leaves[i];
-//                 const b = leaves[j];
-//
-//                 if (!areEdgeNeighbors(a.bounds, b.bounds)) continue;
-//
-//                 const diff = Math.abs(a.level - b.level);
-//                 if (diff <= 1) continue; // already OK
-//
-//                 // Pick the coarser (shallower) node to split
-//                 const coarser = a.level < b.level ? a : b;
-//                 splitNode(coarser, maxDepth);
-//                 changed = true;
-//             }
-//         }
-//     } while (changed);
-// }
-
 const balance = (leaves: QuadTreeNode[], maxDepth: number): boolean => {
     let changed = false;
     for (let i = 0; i < leaves.length; i++) {

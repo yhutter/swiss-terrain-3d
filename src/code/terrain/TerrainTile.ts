@@ -17,25 +17,6 @@ export class TerrainTile extends THREE.Group {
     private _enableStitchingColor: boolean = false
     private _params: TerrainTileParams;
 
-    // private readonly _positionNode = Fn(() => {
-    //     let finalPosition = vec3(0)
-    //     If(this._uUseDemTexture, () => {
-    //         const height = texture(this._uDemTexture.value!, uv()).r
-    //         const normalizedHeight = mix(this._uHeightScaleMin, this._uHeightScaleMax, height)
-    //         finalPosition.assign(positionGeometry.add(vec3(0, normalizedHeight, 0)))
-    //     }).Else(() => {
-    //         finalPosition.assign(positionGeometry)
-    //     })
-    //     return finalPosition
-    // })
-    //
-    // private readonly _colorNode = Fn(() => {
-    //     const dopColor = texture(this._uDopTexture.value!, uv())
-    //     const finalColor = vec4(this._uTintColor.mul(dopColor))
-    //     return finalColor
-    // })
-    //
-
     get identifier(): string {
         return this._identifier
     }
