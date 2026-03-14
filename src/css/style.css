@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,100..900;1,100..900&display=swap');
+
 * {
     margin: 0;
     padding: 0;
@@ -6,4 +8,24 @@
 html,
 body {
     overflow: hidden;
+    font-family: 'Roboto', sans-serif;
+}
+
+.swisstopo-copyright {
+    position: absolute;
+    bottom: 0;
+    line-height: 1.5;
+    left: 0;
+    color: #cecdc3;
+    background-color: #100f0f;
+    font-weight: 600;
+    padding: 1rem;
+    margin: 0.5rem;
+    border-radius: 0.5rem;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+
+    a {
+        color: #67800b;
+        text-decoration: none;
+    }
 }
