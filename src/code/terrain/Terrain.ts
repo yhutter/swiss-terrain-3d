@@ -30,6 +30,7 @@ export class Terrain extends THREE.Group {
     private _camera: THREE.PerspectiveCamera
     private _cameraQuadTreeVisualization: THREE.OrthographicCamera
     private _cameraPosition: THREE.Vector3 = new THREE.Vector3(0, 0, 0)
+    private _cameraMarker: THREE.Mesh | null = null
 
     private _terrainCameraControls: TerrainCameraControls
     private _size: THREE.Vector2 = new THREE.Vector2(0, 0)
@@ -123,6 +124,11 @@ export class Terrain extends THREE.Group {
         );
 
         this._cameraQuadTreeVisualization.rotation.x = -Math.PI / 2
+
+        this._cameraMarker = this.createCameraMarker()
+        this._cameraMarker.position.x = this._cameraPosition.x
+        this._cameraMarker.position.z = this._cameraPosition.z
+        this.add(this._cameraMarker)
     }
 
     onResize(aspect: number): void {
@@ -144,6 +150,33 @@ export class Terrain extends THREE.Group {
         if (this._quadTreeWorker != null) {
             this._quadTreeWorker.insertPosition(position)
         }
+        if (this._cameraMarker) {
+            this._cameraMarker.position.x = this._cameraPosition.x
+            this._cameraMarker.position.z = this._cameraPosition.z
+        }
+    }
+
+    private createCameraMarker(): THREE.Mesh {
+        const markerSize = 400;
+        const markerColor = 0x66800b
+        const geometry = new THREE.PlaneGeometry(markerSize, markerSize)
+        const material = new THREE.MeshBasicMaterial({
+            color: markerColor,
+            side: THREE.DoubleSide,
+            depthTest: false,
+            depthWrite: false,
+            transparent: true,
+            opacity: 0.9,
+        })
+        const marker = new THREE.Mesh(geometry, material)
+        marker.rotation.x = -Math.PI / 2
+
+        // Slightly elevate the marker above the terrain to prevent z-fighting
+        marker.position.y = 5
+
+        marker.visible = false // Set to true only when in ortographic camera mode
+
+        return marker
     }
 
     private updateFromQuadTreeNodes(quadTreeNodes: QuadTreeNode[]): void {
@@ -221,7 +254,10 @@ export class Terrain extends THREE.Group {
             }
         })
 
-        folder.addBinding(this._tweaks, "switchToOrtographicCamera", { label: "Switch to Ortographic Camera" })
+        folder.addBinding(this._tweaks, "switchToOrtographicCamera", { label: "Switch to Ortographic Camera" }).on("change", (e) => {
+            this._tweaks.switchToOrtographicCamera = e.value
+            this._cameraMarker!.visible = this._tweaks.switchToOrtographicCamera
+        })
 
         folder.addBinding(this._tweaks, "enableBoxHelper", {
             label: "Enable Box Helper"
