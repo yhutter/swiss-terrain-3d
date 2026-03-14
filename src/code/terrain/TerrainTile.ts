@@ -1,6 +1,12 @@
 import * as THREE from "three"
+
 import TerrainTileVertexShader from "./Shaders/TerrainTile.vert"
 import TerrainTileFragmentShader from "./Shaders/TerrainTile.frag"
+
+import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
+import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
+import { Line2 } from 'three/examples/jsm/lines/Line2.js';
+
 
 import { TerrainTileParams } from './TerrainTileParams';
 import { GeometryGenerator } from '../Utils/GeometryGenerator';
@@ -10,7 +16,7 @@ import CustomShaderMaterial from "three-custom-shader-material/vanilla";
 export class TerrainTile extends THREE.Group {
     private _identifier: string
     private _mesh: THREE.Mesh | null = null
-    private _lineMesh: THREE.LineSegments | null = null
+    private _lineMesh: Line2 | null = null
     private _material: CustomShaderMaterial<typeof THREE.MeshStandardMaterial> | null = null
     private _stitchingMode: IndexStitchingMode = IndexStitchingMode.Full
     private _boxHelper: THREE.BoxHelper | null = null
@@ -149,10 +155,8 @@ export class TerrainTile extends THREE.Group {
         this._material.uniforms.uTintColor.value = (this._stitchingMode == IndexStitchingMode.Full || !this._enableStitchingColor) ? new THREE.Color(0xffffff) : new THREE.Color(0xffff00)
 
         if (this._lineMesh) {
-            const colorBufferAttribute = this._lineMesh.geometry.getAttribute('color')
             const colors = this.getVertexColorsForStitchingMode(this._stitchingMode)
-            colorBufferAttribute.array.set(colors)
-            colorBufferAttribute.needsUpdate = true;
+            this._lineMesh.geometry.setColors(colors)
         }
 
         if (this._mesh && this._mesh.geometry) {
@@ -208,9 +212,9 @@ export class TerrainTile extends THREE.Group {
         this._mesh.geometry.boundingSphere = sphere
     }
 
-    private createLineMesh(bounds: THREE.Box2): THREE.LineSegments {
-        const geometry = new THREE.BufferGeometry()
-        const vertices = []
+    private createLineMesh(bounds: THREE.Box2): Line2 {
+        const geometry = new LineGeometry()
+        const positions = []
 
         const cellMin = bounds.min
         const cellMax = bounds.max
@@ -218,7 +222,7 @@ export class TerrainTile extends THREE.Group {
         const minHeight = this._params.level
 
 
-        vertices.push(
+        positions.push(
             // North edge
             cellMin.x, minHeight, cellMin.y,
             cellMax.x, minHeight, cellMin.y,
@@ -238,15 +242,18 @@ export class TerrainTile extends THREE.Group {
 
         const colors = this.getVertexColorsForStitchingMode(this._stitchingMode)
 
-        geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3))
-        geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3))
-        const material = new THREE.LineBasicMaterial({
+        geometry.setPositions(positions)
+        geometry.setColors(colors)
+
+        const material = new LineMaterial({
             vertexColors: true,
             depthWrite: false,
             depthTest: true,
             transparent: true,
+            resolution: new THREE.Vector2(window.innerWidth, window.innerHeight),
+            linewidth: 4
         })
-        const lineMesh = new THREE.LineSegments(geometry, material)
+        const lineMesh = new Line2(geometry, material);
         return lineMesh
     }
 }
