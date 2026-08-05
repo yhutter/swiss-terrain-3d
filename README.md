@@ -17,6 +17,7 @@ The project uses the Swisstopo dataset `ALTI3D` as well as `SWISSIMAGE` for terr
 ## :clap: Ressources
 - [SDL3 CMake Guide](https://wiki.libsdl.org/SDL3/README-cmake)
 - [SDL3 API Guide](https://wiki.libsdl.org/SDL3/CategoryAPI)
+- [SDL3 GPU Guide](https://www.jonathanfischer.net/gpu-by-example-part1/)
 
 ## :rocket: How to build and run
 First the repository needs to be cloned:
