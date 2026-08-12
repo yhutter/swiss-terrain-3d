@@ -2,15 +2,26 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
 
+#include <stdlib.h>
+
 #define WIDTH 1280
 #define HEIGHT 960
 #define DEBUG true
 
-static SDL_Window* window = NULL;
-static SDL_Renderer* renderer = NULL;
-static SDL_GPUDevice* device = NULL;
+typedef struct {
+    SDL_Window* window;
+    SDL_Renderer* renderer;
+    SDL_GPUDevice* device;
+} AppContext;
+
+static AppContext* app_context = NULL;
 
 SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
+    app_context = malloc(sizeof(AppContext));
+    app_context->window = NULL;
+    app_context->renderer = NULL;
+    app_context->device = NULL;
+
     if(!SDL_SetAppMetadata("Swiss Terrain 3D", "0.0.1", "ch.yhutter.swissterrain3d")) {
         SDL_Log("Failed to set app metadata: %s", SDL_GetError());
         return SDL_APP_FAILURE;
@@ -22,24 +33,24 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
     }
 
     SDL_WindowFlags window_flags = SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_RESIZABLE;
-    if (!SDL_CreateWindowAndRenderer("Swiss Terrain 3D", WIDTH, HEIGHT, window_flags, &window, &renderer)) {
+    if (!SDL_CreateWindowAndRenderer("Swiss Terrain 3D", WIDTH, HEIGHT, window_flags, &app_context->window, &app_context->renderer)) {
         SDL_Log("Could not create window/renderer: %s", SDL_GetError());
         return SDL_APP_FAILURE;
     }
 
     SDL_GPUShaderFormat shader_format = SDL_GPU_SHADERFORMAT_SPIRV | SDL_GPU_SHADERFORMAT_MSL;
-    device = SDL_CreateGPUDevice(shader_format, DEBUG, NULL);
-    if (!device) {
+    app_context->device = SDL_CreateGPUDevice(shader_format, DEBUG, NULL);
+    if (!app_context->device) {
         SDL_Log("Failed to create gpu device: %s", SDL_GetError());
         return SDL_APP_FAILURE;
     }
 
-    if (!SDL_ClaimWindowForGPUDevice(device, window)) {
+    if (!SDL_ClaimWindowForGPUDevice(app_context->device, app_context->window)) {
         SDL_Log("Failed to claim window for gpu device: %s", SDL_GetError());
         return SDL_APP_FAILURE;
     }
 
-    SDL_SetRenderLogicalPresentation(renderer, WIDTH, HEIGHT, SDL_LOGICAL_PRESENTATION_LETTERBOX);
+    SDL_SetRenderLogicalPresentation(app_context->renderer, WIDTH, HEIGHT, SDL_LOGICAL_PRESENTATION_LETTERBOX);
     return SDL_APP_CONTINUE;
 }
 
@@ -57,14 +68,14 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event) {
 }
 
 SDL_AppResult SDL_AppIterate(void* appstate) {
-    SDL_GPUCommandBuffer* command_buffer = SDL_AcquireGPUCommandBuffer(device);
+    SDL_GPUCommandBuffer* command_buffer = SDL_AcquireGPUCommandBuffer(app_context->device);
     if (!command_buffer) {
         SDL_Log("Failed to acquire command buffer: %s", SDL_GetError());
         return SDL_APP_FAILURE;
     }
 
     SDL_GPUTexture* swapchain_texture = NULL;
-    if (!SDL_WaitAndAcquireGPUSwapchainTexture(command_buffer, window, &swapchain_texture, NULL, NULL)) {
+    if (!SDL_WaitAndAcquireGPUSwapchainTexture(command_buffer, app_context->window, &swapchain_texture, NULL, NULL)) {
         SDL_Log("Failed to acquire swap chain texture: %s", SDL_GetError());
         return SDL_APP_FAILURE;
     }
@@ -91,10 +102,11 @@ SDL_AppResult SDL_AppIterate(void* appstate) {
 }
 
 void SDL_AppQuit(void* appstate, SDL_AppResult result) {
-    SDL_ReleaseWindowFromGPUDevice(device, window);
-    SDL_DestroyGPUDevice(device);
-    SDL_DestroyRenderer(renderer);
-    SDL_DestroyWindow(window);
+    SDL_ReleaseWindowFromGPUDevice(app_context->device, app_context->window);
+    SDL_DestroyGPUDevice(app_context->device);
+    SDL_DestroyRenderer(app_context->renderer);
+    SDL_DestroyWindow(app_context->window);
     SDL_Quit();
+    free(app_context);
 }
 
