@@ -9,15 +9,15 @@ build :: () {
     }
 
     BUILD_DIRECTORY :: "./build/";
-    
-    target_options := get_build_options(w);
-    copy_commonly_propagated_fields(get_build_options(), *target_options);
-
-    target_options.output_executable_name = "swissterrain3d";
-    target_options.output_path = BUILD_DIRECTORY;
     make_directory_if_it_does_not_exist(BUILD_DIRECTORY);
 
-    set_build_options(target_options, w);
+    options := get_build_options(w);
+    copy_commonly_propagated_fields(get_build_options(), *options);
+
+    options.output_executable_name = "swissterrain3d";
+    options.output_path = BUILD_DIRECTORY;
+
+    set_build_options(options, w);
     set_build_options_dc(.{ do_output = false });
 
     compiler_begin_intercept(w);
