@@ -1,6 +1,7 @@
 #define SDL_MAIN_USE_CALLBACKS 1
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
+#include <SDL3_ttf/SDL_ttf.h>
 
 #include <stdlib.h>
 
@@ -12,6 +13,8 @@ typedef struct {
     SDL_Window* window;
     SDL_Renderer* renderer;
     SDL_GPUDevice* device;
+    TTF_Font* font;
+    const char* base_path;
 } AppContext;
 
 
@@ -30,6 +33,7 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
     app_context->window = NULL;
     app_context->renderer = NULL;
     app_context->device = NULL;
+    app_context->font = NULL;
 
     if(!SDL_SetAppMetadata("Swiss Terrain 3D", "0.0.1", "ch.yhutter.swissterrain3d")) {
         SDL_Log("Failed to set app metadata: %s", SDL_GetError());
@@ -60,6 +64,13 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
     }
 
     SDL_SetRenderLogicalPresentation(app_context->renderer, WIDTH, HEIGHT, SDL_LOGICAL_PRESENTATION_LETTERBOX);
+
+    if (!TTF_Init()) {
+        SDL_Log("Failed to initialize SDL_ttf: %s", SDL_GetError());
+        return SDL_APP_FAILURE;
+    }
+
+    app_context->base_path = SDL_GetBasePath();
     return SDL_APP_CONTINUE;
 }
 
@@ -111,10 +122,12 @@ SDL_AppResult SDL_AppIterate(void* appstate) {
 }
 
 void SDL_AppQuit(void* appstate, SDL_AppResult result) {
+    TTF_CloseFont(app_context->font);
     SDL_ReleaseWindowFromGPUDevice(app_context->device, app_context->window);
     SDL_DestroyGPUDevice(app_context->device);
     SDL_DestroyRenderer(app_context->renderer);
     SDL_DestroyWindow(app_context->window);
+    TTF_Quit();
     SDL_Quit();
     free(app_context);
 }

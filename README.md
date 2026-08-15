@@ -26,6 +26,7 @@ First the repository needs to be cloned:
 ```bash
 git clone https://github.com/yhutter/swiss-terrain-3d --depth=1 --recurse-submodules
 cd swiss-terrain-3d
+git submodule update --init --recursive
 mkdir build
 cmake -S . -B build -G Ninja
 cmake --build build --config Release -j16
