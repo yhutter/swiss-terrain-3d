@@ -6,7 +6,7 @@
 
 #define WIDTH 1280
 #define HEIGHT 960
-#define DEBUG true
+#define CLEAR_COLOR SDL_COLOR(0x091B1EFF)
 
 typedef struct {
     SDL_Window* window;
@@ -14,7 +14,16 @@ typedef struct {
     SDL_GPUDevice* device;
 } AppContext;
 
+
 static AppContext* app_context = NULL;
+
+#define SDL_COLOR(hex) \
+    ((SDL_FColor) { \
+        ((((uint32_t)hex >> 24) & 0xFF) / 255.0f),\
+        ((((uint32_t)hex >> 16) & 0xFF) / 255.0f),\
+        ((((uint32_t)hex >> 8) & 0xFF) / 255.0f),\
+        ((((uint32_t)hex >> 0) & 0xFF) / 255.0f)\
+    })
 
 SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
     app_context = malloc(sizeof(AppContext));
@@ -39,7 +48,7 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
     }
 
     SDL_GPUShaderFormat shader_format = SDL_GPU_SHADERFORMAT_SPIRV | SDL_GPU_SHADERFORMAT_MSL;
-    app_context->device = SDL_CreateGPUDevice(shader_format, DEBUG, NULL);
+    app_context->device = SDL_CreateGPUDevice(shader_format, false, NULL);
     if (!app_context->device) {
         SDL_Log("Failed to create gpu device: %s", SDL_GetError());
         return SDL_APP_FAILURE;
@@ -90,7 +99,7 @@ SDL_AppResult SDL_AppIterate(void* appstate) {
         // Keep the rendered output
         .store_op = SDL_GPU_STOREOP_STORE,
 
-        .clear_color = { 0.0f, 0.0f, 0.0f, 1.0f }
+        .clear_color = CLEAR_COLOR
     };
 
     SDL_GPURenderPass* render_pass = SDL_BeginGPURenderPass(command_buffer, &target_info, 1, NULL);
