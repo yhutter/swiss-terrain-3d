@@ -15,20 +15,18 @@ Make sure you have the following installed on your system:
 The project uses the Swisstopo dataset `ALTI3D` as well as `SWISSIMAGE` for terrain data. You can download the dataset from the official swisstopo website. For example the `ALTI3D` dataset can be found [here](https://www.swisstopo.admin.ch/en/height-model-swissalti3d) whereas the `SWISSIMAGE` dataset is available under the following [link](https://www.swisstopo.admin.ch/de/orthobilder-swissimage-10-cm).
 
 ## :clap: Ressources
-- [SDL3 CMake Guide](https://wiki.libsdl.org/SDL3/README-cmake)
-- [SDL3 API Guide](https://wiki.libsdl.org/SDL3/CategoryAPI)
-- [SDL3 GPU Guide](https://www.jonathanfischer.net/gpu-by-example-part1/)
-- [GPU for Beginners](https://gpuforbeginners.com/)
+- [Sokol + ImGUI Starter Template](https://github.com/floooh/cimgui-sokol-starterkit)
+- [Sokol Clear Screen Example](https://github.com/floooh/sokol-samples/blob/master/sapp/clear-sapp.c)
 
 ## :rocket: How to build and run
 First the repository needs to be cloned:
 
 ```bash
-git clone https://github.com/yhutter/swiss-terrain-3d --depth=1 --recurse-submodules
+git clone https://github.com/yhutter/swiss-terrain-3d --depth=1
 cd swiss-terrain-3d
-git submodule update --init --recursive
-mkdir build
-cmake -S . -B build -G Ninja
-cmake --build build --config Release -j16
+chmod +x build.sh # Make shell script executable (Utility script which invokes CMake etc.)
+./build.sh --release # Trigger release build
+./build.sh --debug # Trigger debug build (this is also the default if no arguments are passed)
 ```
+After that there should be a `swiss-terrain-3d` executable available in either `build_debug` or `build_release` (depending on which kind of build you triggered via `build.sh`).
 
