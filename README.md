@@ -21,14 +21,14 @@ The project uses the Swisstopo dataset `ALTI3D` as well as `SWISSIMAGE` for terr
 - [GPU for Beginners](https://gpuforbeginners.com/)
 
 ## :rocket: How to build and run
-First the repository needs to be cloned:
 
 ```bash
 git clone https://github.com/yhutter/swiss-terrain-3d --depth=1 --recurse-submodules
 cd swiss-terrain-3d
 git submodule update --init --recursive
-mkdir build
-cmake -S . -B build -G Ninja
-cmake --build build --config Release -j16
+chmod +x ./build.sh
+./build.sh -release # Release Build
+./build.sh -debug # Debug Build
+./build.sh # Calling without any arguments will also trigger Debug Build
 ```
 

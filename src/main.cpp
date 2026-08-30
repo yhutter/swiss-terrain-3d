@@ -5,35 +5,38 @@
 
 #include <stdlib.h>
 
-#define WIDTH 1280
-#define HEIGHT 960
-#define CLEAR_COLOR SDL_COLOR(0x091B1EFF)
-
-typedef struct {
+struct AppContext {
     SDL_Window* window;
     SDL_Renderer* renderer;
     SDL_GPUDevice* device;
     TTF_Font* font;
     const char* base_path;
-} AppContext;
+    SDL_FColor clear_color;
+    int width;
+    int height;
+};
 
 
 static AppContext* app_context = NULL;
 
-#define SDL_COLOR(hex) \
-    ((SDL_FColor) { \
-        ((((uint32_t)hex >> 24) & 0xFF) / 255.0f),\
-        ((((uint32_t)hex >> 16) & 0xFF) / 255.0f),\
-        ((((uint32_t)hex >> 8) & 0xFF) / 255.0f),\
-        ((((uint32_t)hex >> 0) & 0xFF) / 255.0f)\
-    })
+SDL_FColor To_SDL_Color(uint32_t hex) {
+    return (SDL_FColor) {
+        ((hex >> 24) & 0xFF) / 255.0f,
+        ((hex >> 16) & 0xFF) / 255.0f,
+        ((hex >> 8) & 0xFF) / 255.0f,
+        ((hex >> 0) & 0xFF) / 255.0f,
+    };
+}
 
 SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
-    app_context = malloc(sizeof(AppContext));
+    app_context = (AppContext*) malloc(sizeof(AppContext));
     app_context->window = NULL;
     app_context->renderer = NULL;
     app_context->device = NULL;
     app_context->font = NULL;
+    app_context->clear_color = To_SDL_Color(0x91B1EFF);
+    app_context->width = 1920;
+    app_context->height = 1080;
 
     if(!SDL_SetAppMetadata("Swiss Terrain 3D", "0.0.1", "ch.yhutter.swissterrain3d")) {
         SDL_Log("Failed to set app metadata: %s", SDL_GetError());
@@ -46,7 +49,7 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
     }
 
     SDL_WindowFlags window_flags = SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_RESIZABLE;
-    if (!SDL_CreateWindowAndRenderer("Swiss Terrain 3D", WIDTH, HEIGHT, window_flags, &app_context->window, &app_context->renderer)) {
+    if (!SDL_CreateWindowAndRenderer("Swiss Terrain 3D", app_context->width, app_context->height, window_flags, &app_context->window, &app_context->renderer)) {
         SDL_Log("Could not create window/renderer: %s", SDL_GetError());
         return SDL_APP_FAILURE;
     }
@@ -63,7 +66,7 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
         return SDL_APP_FAILURE;
     }
 
-    SDL_SetRenderLogicalPresentation(app_context->renderer, WIDTH, HEIGHT, SDL_LOGICAL_PRESENTATION_LETTERBOX);
+    SDL_SetRenderLogicalPresentation(app_context->renderer, app_context->width, app_context->height, SDL_LOGICAL_PRESENTATION_LETTERBOX);
 
     if (!TTF_Init()) {
         SDL_Log("Failed to initialize SDL_ttf: %s", SDL_GetError());
@@ -102,15 +105,15 @@ SDL_AppResult SDL_AppIterate(void* appstate) {
 
     SDL_GPUColorTargetInfo target_info = {
         .texture = swapchain_texture,
-        .cycle = true,
-        
+        .clear_color = app_context->clear_color,
+
         // Clear the texture to a known color
         .load_op = SDL_GPU_LOADOP_CLEAR,
 
         // Keep the rendered output
         .store_op = SDL_GPU_STOREOP_STORE,
 
-        .clear_color = CLEAR_COLOR
+        .cycle = true,
     };
 
     SDL_GPURenderPass* render_pass = SDL_BeginGPURenderPass(command_buffer, &target_info, 1, NULL);
