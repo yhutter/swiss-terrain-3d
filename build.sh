@@ -20,13 +20,21 @@ build_debug() {
     echo "Done."
 }
 
+recompile_shaders() {
+    echo "Recompiling shaders..."
+    sokol-shdc --input ./src/assets/shaders/swissterrain3d.glsl --output ./src/shader.h --slang glsl430:hlsl5:metal_macos
+}
+
 if [ "$1" = "release" ] || [ "$1" = "--release" ] || [ "$1" = "-release" ]; then
+    recompile_shaders
     build_release
 elif [ "$1" = "debug" ] || [ "$1" = "--debug" ] || [ "$1" = "-debug" ]; then
+    recompile_shaders
     build_debug
     ./swissterrain3d
 else
     echo "No build mode specified, starting debug build"
+    recompile_shaders
     build_debug
     ./swissterrain3d
 fi

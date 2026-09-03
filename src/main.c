@@ -5,7 +5,11 @@
 #include "cimgui.h"
 #include "sokol_imgui.h"
 
+#include "shader.h"
+
 static struct {
+    sg_pipeline pip;
+    sg_bindings bind;
     sg_pass_action pass_action;
 } state;
 
@@ -16,6 +20,32 @@ static void init(void) {
     });
 
     simgui_setup(&(simgui_desc_t){0});
+
+    float vertices[] = {
+        //positions         // colors
+         0.0f,  0.5f, 0.5f, 1.0f, 0.0f, 0.0f, 1.0f,
+         0.5f, -0.5f, 0.5f, 0.0f, 1.0f, 0.0f, 1.0f,
+        -0.5f, -0.5f, 0.5f, 0.0f, 0.0f, 1.0f, 1.0f,
+    };
+
+    state.bind.vertex_buffers[0] = sg_make_buffer(&(sg_buffer_desc) {
+        .data = SG_RANGE(vertices),
+        .label = "vertex-buffer"
+    });
+
+    sg_shader shd  = sg_make_shader(swissterrain3d_shader_desc(sg_query_backend()));
+
+    state.pip = sg_make_pipeline(&(sg_pipeline_desc) {
+        .shader = shd,
+        .layout = {
+            .attrs = {
+                [ATTR_swissterrain3d_pos].format = SG_VERTEXFORMAT_FLOAT3,
+                [ATTR_swissterrain3d_color0].format = SG_VERTEXFORMAT_FLOAT4
+            }
+        },
+        .label = "swissterrain3d-pipeline"
+    });
+
 
     state.pass_action = (sg_pass_action) {
         .colors[0] = {
@@ -43,6 +73,10 @@ static void frame(void) {
         .action = state.pass_action,
         .swapchain = sglue_swapchain()
     });
+
+    sg_apply_pipeline(state.pip);
+    sg_apply_bindings(&state.bind);
+    sg_draw(0, 3, 1);
     simgui_render();
     sg_end_pass();
     sg_commit();
